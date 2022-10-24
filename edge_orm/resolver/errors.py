@@ -1,0 +1,2 @@
+class ResolverException(Exception):
+    pass
