@@ -3,12 +3,22 @@ from uuid import UUID
 from pydantic import BaseModel, PrivateAttr, Field
 
 
-InsertType = T.TypeVar("InsertType", bound=BaseModel)
-PatchType = T.TypeVar("PatchType", bound=BaseModel)
+# InsertType = T.TypeVar("InsertType", bound=BaseModel)
+# PatchType = T.TypeVar("PatchType", bound=BaseModel)
 
 
-class Node(BaseModel, T.Generic[InsertType, PatchType]):
+class Node(BaseModel):
     id: UUID = Field(..., allow_mutation=False)
+
+    class Edge:
+        appendix_properties: T.ClassVar[set[str]]
+        computed_properties: T.ClassVar[set[str]]
+
+    """
+    @classmethod
+    def appendix_properties(cls) -> set[str]:
+        return cls.Edge.appendix_properties
+    """
 
     class Config:
         validate_assignment = True
