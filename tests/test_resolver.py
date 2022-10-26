@@ -1,3 +1,4 @@
+from uuid import UUID
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import pytest
@@ -135,3 +136,15 @@ def test_fields_to_return() -> None:
     assert rez._fields_to_return == {"id", "name", "names_of_friends"}
     rez.include_appendix_properties()
     assert rez._fields_to_return == {"id", "name", "names_of_friends", "created_at"}
+    extra_field_1 = ["friends_names := .friends.name", "friends_ids := .friends.ids"]
+    rez.extra_field("friends_names", ".friends.name")
+    rez.extra_field("friends_ids", ".friends.ids", conversion_func=UUID)
+    assert rez._extra_fields == {*extra_field_1}
+    assert rez._extra_fields_conversion_funcs["friends_ids"] == UUID
+    extra_field_2 = "friends_fb_ids := .friends.auth_id"
+    rez.extra_field("friends_fb_ids", ".friends.auth_id")
+    assert rez._extra_fields == {*extra_field_1, extra_field_2}
+    assert (
+        rez.build_return_fields_str()
+        == "created_at, friends_fb_ids := .friends.auth_id, friends_ids := .friends.ids, friends_names := .friends.name, id, name, names_of_friends"
+    )

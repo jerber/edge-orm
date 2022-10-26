@@ -8,6 +8,7 @@ EdgeNodeType = T.TypeVar("EdgeNodeType", bound=T.Type[Node])
 ThisResolverType = T.TypeVar("ThisResolverType", bound="Resolver")  # type: ignore
 
 VARS = dict[str, T.Any]
+CONVERSION_FUNC = T.Callable[[str], T.Any]
 
 
 class Resolver(BaseModel, T.Generic[NodeType]):
@@ -19,6 +20,10 @@ class Resolver(BaseModel, T.Generic[NodeType]):
     _query_variables: VARS = PrivateAttr(default_factory=dict)
 
     _fields_to_return: set[str] = PrivateAttr(None)  # init this?
+    _extra_fields: set[str] = PrivateAttr(default_factory=set)
+    _extra_fields_conversion_funcs: dict[str, CONVERSION_FUNC] = PrivateAttr(
+        default_factory=dict
+    )
 
     def __init__(self, **data: T.Any) -> None:
         super().__init__(**data)
@@ -156,6 +161,20 @@ class Resolver(BaseModel, T.Generic[NodeType]):
         self._fields_to_return.update(self.node_computed_properties())
         return self
 
+    def extra_field(
+        self: ThisResolverType,
+        field_name: str,
+        expression: str,
+        variables: VARS | None = None,
+        conversion_func: CONVERSION_FUNC | None = None,
+    ) -> ThisResolverType:
+        extra_field_str = f"{field_name} := {expression}"
+        self.add_query_variables(variables)
+        self._extra_fields.add(extra_field_str)
+        if conversion_func:
+            self._extra_fields_conversion_funcs[field_name] = conversion_func
+        return self
+
     """QUERY BUILDING METHODS"""
 
     def _filter_str(self) -> str:
@@ -188,11 +207,14 @@ class Resolver(BaseModel, T.Generic[NodeType]):
         s = " ".join([s for s in s_lst if s])
         return s
 
-    def return_fields_str(self) -> str:
-        ...
+    def build_return_fields_str(self) -> str:
+        non_nested_fields: list[str] = sorted(
+            [*self._fields_to_return, *self._extra_fields]
+        )
+        return ", ".join(non_nested_fields)
 
     def query_str(self) -> str:
-        # there's the innter parts and the outer parts
+        # there's the inner parts and the outer parts
         # select User{id, name, phone_number} filter .name = "hane"
         ...
 

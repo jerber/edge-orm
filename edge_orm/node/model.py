@@ -10,6 +10,10 @@ from pydantic import BaseModel, PrivateAttr, Field
 class Node(BaseModel):
     id: UUID = Field(..., allow_mutation=False)
 
+    class Config:
+        allow_mutation = False
+        validate_assignment = True
+
     class Edge:
         appendix_properties: T.ClassVar[set[str]]
         computed_properties: T.ClassVar[set[str]]
@@ -19,6 +23,3 @@ class Node(BaseModel):
     def appendix_properties(cls) -> set[str]:
         return cls.Edge.appendix_properties
     """
-
-    class Config:
-        validate_assignment = True
