@@ -13,6 +13,7 @@ class Node(BaseModel):
     class Config:
         allow_mutation = False
         validate_assignment = True
+        arbitrary_types_allowed = True
 
     class Edge:
         appendix_properties: T.ClassVar[set[str]]
