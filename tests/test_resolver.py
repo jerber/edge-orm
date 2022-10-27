@@ -2,34 +2,12 @@ from uuid import UUID
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import pytest
-from pydantic import BaseModel
-from edge_orm import Resolver, Node, ResolverException, resolver_enums, logger
+from edge_orm import ResolverException, resolver_enums, logger
+from tests.generator.gen import db_hydrated as db
+import tests
+
 
 logger.setLevel(0)
-
-
-class UserInsert(BaseModel):
-    ...
-
-
-class UserPatch(BaseModel):
-    ...
-
-
-# class User(Node[UserInsert, UserPatch]):
-class User(Node):
-    name: str
-    age: int
-    created_at: datetime
-
-    class Edge:
-        appendix_properties = {"created_at"}
-        computed_properties = {"names_of_friends"}
-
-
-class UserResolver(Resolver[User]):
-    class Edge:
-        node = User
 
 
 def now() -> datetime:
@@ -37,14 +15,14 @@ def now() -> datetime:
 
 
 def test_simple_filter() -> None:
-    rez = UserResolver()
+    rez = db.UserResolver()
     simple_filter = "exists .name"
     rez.filter(simple_filter)
     assert rez._filter == simple_filter
 
 
 def test_filter_with_variables() -> None:
-    rez = UserResolver()
+    rez = db.UserResolver()
     date_filter = f".created_at > <datetime>$now"
     d = now()
     rez.filter(date_filter, {"now": d})
@@ -59,7 +37,7 @@ def test_filter_with_variables() -> None:
 
 
 def test_filters_str() -> None:
-    rez = UserResolver()
+    rez = db.UserResolver()
     created_at_filter = f".created_at > <datetime>$ca"
     last_updated_at_filter = f".last_updated_at > <datetime>$la"
     rez.filter(created_at_filter, {"cs": now()})
@@ -77,7 +55,7 @@ def test_filters_str() -> None:
 
 
 def test_filters_str_with_order_by() -> None:
-    rez = UserResolver()
+    rez = db.UserResolver()
     created_at_filter = f".created_at > <datetime>$ca"
     rez.filter(created_at_filter, {"ca": now()})
     order_by = ".created_at ASC"
@@ -89,7 +67,7 @@ def test_filters_str_with_order_by() -> None:
 
 
 def test_limit_offset_zeros() -> None:
-    rez = UserResolver()
+    rez = db.UserResolver()
     rez.limit(0)
     with pytest.raises(ResolverException) as e:
         rez.limit(10)
@@ -100,7 +78,7 @@ def test_limit_offset_zeros() -> None:
 
 
 def test_filters_str_with_all() -> None:
-    rez = UserResolver()
+    rez = db.UserResolver()
     created_at_filter = f".created_at > <datetime>$ca"
     rez.filter(created_at_filter, {"ca": now()})
     order_by = ".created_at ASC"
@@ -128,8 +106,9 @@ def test_filters_str_with_all() -> None:
 
 
 def test_fields_to_return() -> None:
-    rez = UserResolver()
-    assert rez._fields_to_return == {"id", "name", "age"}
+    rez = db.UserResolver()
+    assert rez._fields_to_return == {"id", "name", "age", "phone_number"}
+    rez.exclude_fields("phone_number")
     rez.include_fields("created_at")
     assert rez._fields_to_return == {"id", "name", "age", "created_at"}
     rez.exclude_fields("age", "created_at")
@@ -137,7 +116,13 @@ def test_fields_to_return() -> None:
     rez.include_computed_properties()
     assert rez._fields_to_return == {"id", "name", "names_of_friends"}
     rez.include_appendix_properties()
-    assert rez._fields_to_return == {"id", "name", "names_of_friends", "created_at"}
+    assert rez._fields_to_return == {
+        "id",
+        "name",
+        "names_of_friends",
+        "created_at",
+        "last_updated_at",
+    }
     extra_field_1 = ["friends_names := .friends.name", "friends_ids := .friends.ids"]
     rez.extra_field("friends_names", ".friends.name")
     rez.extra_field("friends_ids", ".friends.ids", conversion_func=UUID)
@@ -147,7 +132,7 @@ def test_fields_to_return() -> None:
     rez.extra_field("friends_fb_ids", ".friends.auth_id")
     assert rez._extra_fields == {*extra_field_1, extra_field_2}
 
-    return_fields_str = "created_at, friends_fb_ids := .friends.auth_id, friends_ids := .friends.ids, friends_names := .friends.name, id, name, names_of_friends"
+    return_fields_str = "created_at, friends_fb_ids := .friends.auth_id, friends_ids := .friends.ids, friends_names := .friends.name, id, last_updated_at, name, names_of_friends"
 
     assert rez.build_return_fields_str() == return_fields_str
     rez.limit(20).filter("exists .friends")
@@ -158,23 +143,28 @@ def test_fields_to_return() -> None:
 
 
 def test_subset() -> None:
-    rez1 = UserResolver()
-    rez2 = UserResolver().extra_field("hello", '<str>"hello"')
+    rez1 = db.UserResolver()
+    rez2 = db.UserResolver().extra_field("hello", '<str>"hello"')
     assert rez1.is_subset_of(rez2) is True
     assert rez2.is_subset_of(rez1) is False
 
     rez1.extra_field("hello", '<str>"hello"')
     assert rez2.is_subset_of(rez1)
 
-    rez1 = UserResolver().extra_field("hello", '<str>"hello"', conversion_func=UUID)
+    rez1 = db.UserResolver().extra_field("hello", '<str>"hello"', conversion_func=UUID)
     assert rez1.is_subset_of(rez2) is False
 
-    rez1 = UserResolver().extra_field("hello", '<str>"hello"', conversion_func=None)
+    rez1 = db.UserResolver().extra_field("hello", '<str>"hello"', conversion_func=None)
     assert rez1.is_subset_of(rez2) is True
 
-    rez1 = UserResolver().filter("exists .friends")
-    rez2 = UserResolver().filter("exists .friends").limit(10)
+    rez1 = db.UserResolver().filter("exists .friends")
+    rez2 = db.UserResolver().filter("exists .friends").limit(10)
     assert rez1.is_subset_of(rez2) is False
     assert rez2.is_subset_of(rez1) is False
     rez1.limit(10)
     assert rez1.is_subset_of(rez2)
+
+
+def test_node_relationship() -> None:
+    rez = db.UserResolver()
+    assert "hi" not in rez._node_cls.EdgeConfig.appendix_properties

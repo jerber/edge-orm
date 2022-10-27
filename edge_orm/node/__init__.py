@@ -1,4 +1,11 @@
 from .errors import NodeException
-from .model import Node
+from .models import Node, Insert, Patch, CONVERSION_MAP, EdgeConfigBase
 
-__all__ = ["NodeException", "Node"]
+__all__ = [
+    "NodeException",
+    "Node",
+    "Insert",
+    "Patch",
+    "CONVERSION_MAP",
+    "EdgeConfigBase",
+]

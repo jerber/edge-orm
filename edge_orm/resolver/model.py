@@ -1,11 +1,16 @@
 import typing as T
+import edgedb
 from pydantic import BaseModel, PrivateAttr
-from edge_orm.node import Node
+from edge_orm.node import Node, Insert, Patch
 from edge_orm.logs import logger
-from . import enums, errors, helpers
+from edge_orm import helpers
+from . import enums, errors
 from .nested_resolvers import NestedResolvers
 
 NodeType = T.TypeVar("NodeType", bound=Node)
+InsertType = T.TypeVar("InsertType", bound=Insert)
+PatchType = T.TypeVar("PatchType", bound=Patch)
+
 EdgeNodeType = T.TypeVar("EdgeNodeType", bound=T.Type[Node])
 ThisResolverType = T.TypeVar("ThisResolverType", bound="Resolver")  # type: ignore
 
@@ -13,7 +18,7 @@ VARS = dict[str, T.Any]
 CONVERSION_FUNC = T.Callable[[str], T.Any]
 
 
-class Resolver(BaseModel, T.Generic[NodeType]):
+class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
     _filter: str = PrivateAttr(None)
     _order_by: str = PrivateAttr(None)
     _limit: int = PrivateAttr(None)
@@ -29,6 +34,8 @@ class Resolver(BaseModel, T.Generic[NodeType]):
 
     _nested_resolvers: NestedResolvers = PrivateAttr(default_factory=NestedResolvers)
 
+    _node_cls: T.ClassVar[T.Type[NodeType]]  # type: ignore
+
     def __init__(self, **data: T.Any) -> None:
         super().__init__(**data)
         if not self._fields_to_return:
@@ -36,24 +43,17 @@ class Resolver(BaseModel, T.Generic[NodeType]):
                 self.node_field_names() - self.node_appendix_properties()
             )
 
-    class Edge(T.Generic[EdgeNodeType]):
-        node: T.Type[EdgeNodeType]
-
-    @classmethod
-    def node_cls(cls) -> T.Type[NodeType]:
-        return cls.Edge.node  # type: ignore
-
     @classmethod
     def node_field_names(cls: T.Type[ThisResolverType]) -> set[str]:
-        return {field.alias for field in cls.node_cls().__fields__.values()}
+        return {field.alias for field in cls._node_cls.__fields__.values()}
 
     @classmethod
     def node_appendix_properties(cls) -> set[str]:
-        return cls.node_cls().Edge.appendix_properties
+        return cls._node_cls.EdgeConfig.appendix_properties
 
     @classmethod
     def node_computed_properties(cls) -> set[str]:
-        return cls.node_cls().Edge.computed_properties
+        return cls._node_cls.EdgeConfig.computed_properties
 
     """RESOLVER BUILDING METHODS"""
 
@@ -104,6 +104,52 @@ class Resolver(BaseModel, T.Generic[NodeType]):
         else:
             self._filter = filter_str
         return self
+
+    def _filter_by(
+        self: ThisResolverType,
+        connector: enums.FilterConnector = enums.FilterConnector.AND,
+        **kwargs: T.Any,
+    ) -> ThisResolverType:
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        if not kwargs:
+            raise errors.ResolverException("Nothing to filter by.")
+        conversion_map = self._node_cls.EdgeConfig.node_edgedb_conversion_map
+        filter_strs = []
+        variables = {}
+        for field_name, field_value in kwargs.items():
+            cast = conversion_map[field_name]["cast"]
+            variable_name = f"{field_name}{helpers.random_str(10)}"
+            filter_strs.append(f".{field_name} = <{cast}>${variable_name}")
+            variables[variable_name] = field_value
+        filter_str = " AND ".join(filter_strs)
+        return self.filter(
+            filter_str=filter_str, variables=variables, connector=connector
+        )
+
+    def _filter_in(
+        self: ThisResolverType,
+        connector: enums.FilterConnector = enums.FilterConnector.AND,
+        **kwargs: T.Any,
+    ) -> ThisResolverType:
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        if not kwargs:
+            raise errors.ResolverException("Nothing to filter by.")
+        conversion_map = self._node_cls.EdgeConfig.node_edgedb_conversion_map
+        filter_strs = []
+        variables = {}
+        for field_name, value_lst in kwargs.items():
+            cast = conversion_map[field_name]["cast"]
+            variable_name = f"{field_name}s{helpers.random_str(10)}"
+            if cast.startswith("default::"):  # if an enum or other scalar
+                s = f".{field_name} in <{cast}>array_unpack(<array<str>>${variable_name})"
+            else:
+                s = f".{field_name} in array_unpack(<array<{cast}>>${variable_name})"
+            filter_strs.append(s)
+            variables[variable_name] = value_lst
+        filter_str = " AND ".join(filter_strs)
+        return self.filter(
+            filter_str=filter_str, variables=variables, connector=connector
+        )
 
     def order_by(
         self: ThisResolverType,
@@ -218,7 +264,7 @@ class Resolver(BaseModel, T.Generic[NodeType]):
         return ", ".join(non_nested_fields)
 
     def full_query_str(self) -> str:
-        s = f"SELECT {self.node_cls().__name__} {{ {self.build_return_fields_str()} }}"
+        s = f"SELECT {self._node_cls.__name__} {{ {self.build_return_fields_str()} }}"
         if filters_str := self.build_filters_str():
             s += f" {filters_str}"
         return s
@@ -279,12 +325,50 @@ class Resolver(BaseModel, T.Generic[NodeType]):
 
     """QUERY METHODS"""
 
-    def query(self) -> T.List[NodeType]:
+    async def query(self) -> T.List[NodeType]:
         # TODO
         # DOCS
         ...
 
-    def query_one(self) -> NodeType:
+    async def query_one(self) -> NodeType:
         # TODO
         # DOCS
+        ...
+
+    async def _get(
+        self, *, client: edgedb.AsyncIOClient | None = None, **kwargs: T.Any
+    ) -> NodeType | None:
+        # TODO
+        ...
+
+    async def _gerror(
+        self, *, client: edgedb.AsyncIOClient | None = None, **kwargs: T.Any
+    ) -> NodeType:
+        # TODO
+        ...
+
+    """MUTATION METHODS"""
+
+    async def insert_one(
+        self, insert: InsertType, *, client: edgedb.AsyncIOClient | None = None
+    ) -> NodeType:
+        # TODO
+        ...
+
+    async def insert_many(
+        self, inserts: list[InsertType], *, client: edgedb.AsyncIOClient | None = None
+    ) -> list[NodeType]:
+        # TODO
+        ...
+
+    async def update_one(
+        self, patch: PatchType, *, client: edgedb.AsyncIOClient | None = None
+    ) -> NodeType:
+        # TODO
+        ...
+
+    async def update_many(
+        self, patch: PatchType, *, client: edgedb.AsyncIOClient | None = None
+    ) -> list[NodeType]:
+        # TODO
         ...
