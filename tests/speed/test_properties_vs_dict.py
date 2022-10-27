@@ -170,3 +170,4 @@ if __name__ == "__main__":
 # changing Field(UNSET) -> Field(None) is a 2x speedup
 # so, there are benefits to having fn_ -> pydantic validates them and unsing new Unset it's not so slow, only 2x,
 # will try this approach first. also make sure for dict it works by taking away _
+# property methods do not add much extra time, as expected

@@ -1,7 +1,9 @@
 import typing as T
 from pydantic import BaseModel, PrivateAttr
 from edge_orm.node import Node
-from . import enums, errors
+from edge_orm.logs import logger
+from . import enums, errors, helpers
+from .nested_resolvers import NestedResolvers
 
 NodeType = T.TypeVar("NodeType", bound=Node)
 EdgeNodeType = T.TypeVar("EdgeNodeType", bound=T.Type[Node])
@@ -19,15 +21,17 @@ class Resolver(BaseModel, T.Generic[NodeType]):
 
     _query_variables: VARS = PrivateAttr(default_factory=dict)
 
-    _fields_to_return: set[str] = PrivateAttr(None)  # init this?
+    _fields_to_return: set[str] = PrivateAttr(default_factory=set)  # init this?
     _extra_fields: set[str] = PrivateAttr(default_factory=set)
     _extra_fields_conversion_funcs: dict[str, CONVERSION_FUNC] = PrivateAttr(
         default_factory=dict
     )
 
+    _nested_resolvers: NestedResolvers = PrivateAttr(default_factory=NestedResolvers)
+
     def __init__(self, **data: T.Any) -> None:
         super().__init__(**data)
-        if self._fields_to_return is None:
+        if not self._fields_to_return:
             self._fields_to_return = (
                 self.node_field_names() - self.node_appendix_properties()
             )
@@ -213,10 +217,65 @@ class Resolver(BaseModel, T.Generic[NodeType]):
         )
         return ", ".join(non_nested_fields)
 
-    def query_str(self) -> str:
-        # there's the inner parts and the outer parts
-        # select User{id, name, phone_number} filter .name = "hane"
-        ...
+    def full_query_str(self) -> str:
+        s = f"SELECT {self.node_cls().__name__} {{ {self.build_return_fields_str()} }}"
+        if filters_str := self.build_filters_str():
+            s += f" {filters_str}"
+        return s
+
+    """MERGING LOGIC"""
+
+    def build_hydrated_filters_str(self) -> str:
+        return helpers.replace_str_with_vars(
+            s=self.build_filters_str(), variables=self._query_variables
+        )
+
+    def is_subset_of(self, other: "Resolver") -> bool:  # type: ignore
+        if self._fields_to_return:
+            self_additional_fields_to_return = (
+                self._fields_to_return - other._fields_to_return
+            )
+            if self_additional_fields_to_return:
+                logger.debug(f"{self_additional_fields_to_return=}")
+                return False
+
+        if self._extra_fields:
+            self_additional_extra_fields = self._extra_fields - other._extra_fields
+            if self_additional_extra_fields:
+                logger.debug(f"{self_additional_extra_fields=}")
+                return False
+            self_additional_conversion_funcs = (
+                self._extra_fields_conversion_funcs.keys()
+                - other._extra_fields_conversion_funcs
+            )
+            if self_additional_conversion_funcs:
+                logger.debug(f"{self_additional_conversion_funcs=}")
+                return False
+
+        # compare filter strs then variables then nested
+        for key, val in self._query_variables.items():
+            if key not in other._query_variables:
+                logger.debug(f"{key} not in other._query_variables")
+                return False
+            if other._query_variables[key] != val:
+                logger.debug(f"{other._query_variables[key]=} != {val=}")
+                return False
+
+        # PROs of this... it should be very safe since you are comparing the actual VARS
+        # cons, it could be overly restrictive. If one is called $start_time vs $startTime it will break...fine tho
+        if self.build_filters_str() != other.build_filters_str():
+            logger.debug(
+                f"{self.__class__.__name__}: {self.build_filters_str()=} != {other.build_filters_str()}"
+            )
+            return False
+
+        if not self._nested_resolvers.is_subset_of(other._nested_resolvers):
+            logger.debug(
+                f"self nested_resolvers are not subset of other nested_resolvers"
+            )
+            return False
+
+        return True
 
     """QUERY METHODS"""
 

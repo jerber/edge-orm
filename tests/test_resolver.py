@@ -3,7 +3,9 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import pytest
 from pydantic import BaseModel
-from edge_orm import Resolver, Node, ResolverException, resolver_enums
+from edge_orm import Resolver, Node, ResolverException, resolver_enums, logger
+
+logger.setLevel(0)
 
 
 class UserInsert(BaseModel):
@@ -144,7 +146,35 @@ def test_fields_to_return() -> None:
     extra_field_2 = "friends_fb_ids := .friends.auth_id"
     rez.extra_field("friends_fb_ids", ".friends.auth_id")
     assert rez._extra_fields == {*extra_field_1, extra_field_2}
+
+    return_fields_str = "created_at, friends_fb_ids := .friends.auth_id, friends_ids := .friends.ids, friends_names := .friends.name, id, name, names_of_friends"
+
+    assert rez.build_return_fields_str() == return_fields_str
+    rez.limit(20).filter("exists .friends")
     assert (
-        rez.build_return_fields_str()
-        == "created_at, friends_fb_ids := .friends.auth_id, friends_ids := .friends.ids, friends_names := .friends.name, id, name, names_of_friends"
+        rez.full_query_str()
+        == f"SELECT User {{ {return_fields_str} }} FILTER exists .friends LIMIT 20"
     )
+
+
+def test_subset() -> None:
+    rez1 = UserResolver()
+    rez2 = UserResolver().extra_field("hello", '<str>"hello"')
+    assert rez1.is_subset_of(rez2) is True
+    assert rez2.is_subset_of(rez1) is False
+
+    rez1.extra_field("hello", '<str>"hello"')
+    assert rez2.is_subset_of(rez1)
+
+    rez1 = UserResolver().extra_field("hello", '<str>"hello"', conversion_func=UUID)
+    assert rez1.is_subset_of(rez2) is False
+
+    rez1 = UserResolver().extra_field("hello", '<str>"hello"', conversion_func=None)
+    assert rez1.is_subset_of(rez2) is True
+
+    rez1 = UserResolver().filter("exists .friends")
+    rez2 = UserResolver().filter("exists .friends").limit(10)
+    assert rez1.is_subset_of(rez2) is False
+    assert rez2.is_subset_of(rez1) is False
+    rez1.limit(10)
+    assert rez1.is_subset_of(rez2)
