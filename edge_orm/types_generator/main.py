@@ -438,8 +438,10 @@ def build_node_and_resolver(
         else:
             if prop.is_computed:
                 exception_name = "ComputedPropertyException"
-                property_name = f"_{prop.name}"
-                property_str = f"{property_name}: T.Union[{type_str}, UnsetType] = PrivateAttr(UNSET)"
+                # property_name = f"_{prop.name}"
+                # property_str = f"{property_name}: T.Union[{type_str}, UnsetType] = PrivateAttr(UNSET)"
+                property_name = f"{prop.name}_"
+                property_str = f'{property_name}: T.Union[{type_str}, UnsetType] = Field(UNSET, alias="{prop.name}")'
             else:
                 exception_name = "AppendixPropertyException"
                 property_name = f"{prop.name}_"
@@ -455,7 +457,7 @@ def build_node_and_resolver(
 def {prop.name}(self) -> {type_str}:
     if self.{property_name} is UNSET:
             raise {exception_name}("{prop.name} is unset")
-    return self.{property_name}
+    return self.{property_name} # type: ignore
                 """
             )
         #             if not prop.is_computed:
@@ -580,12 +582,14 @@ def {prop.name}(self) -> {type_str}:
     # insert type
     insert_inner_str = "\n".join(insert_property_strs)
     insert_conversion_map_str = f"_edgedb_conversion_map: T.Dict[str, T.Dict[str, T.Union[str, bool]]] = {stringify_dict(insert_edgedb_conversion_map)}"
-    insert_s = f"class {insert_model_name}(Insert):\n{indent_lines(insert_inner_str)}\n\n{indent_lines(insert_conversion_map_str)}"
+    # insert_s = f"class {insert_model_name}(Insert):\n{indent_lines(insert_inner_str)}\n\n{indent_lines(insert_conversion_map_str)}"
+    insert_s = f"class {insert_model_name}(Insert):\n{indent_lines(insert_inner_str)}"
 
     # patch type
     patch_inner_str = "\n".join(patch_property_strs)
     patch_conversion_map_str = f"_edgedb_conversion_map: T.Dict[str, T.Dict[str, T.Union[str, bool]]] = {stringify_dict(patch_edgedb_conversion_map)}"
-    patch_s = f"class {patch_model_name}(Patch):\n{indent_lines(patch_inner_str)}\n\n{indent_lines(patch_conversion_map_str)}"
+    # patch_s = f"class {patch_model_name}(Patch):\n{indent_lines(patch_inner_str)}\n\n{indent_lines(patch_conversion_map_str)}"
+    patch_s = f"class {patch_model_name}(Patch):\n{indent_lines(patch_inner_str)}"
 
     # node
     node_properties_str = "\n".join(property_strs)
@@ -613,13 +617,13 @@ def {prop.name}(self) -> {type_str}:
         from_str_validator_str,
         "\n",
         computed_property_getter_str,
-        node_conversion_map_str,
-        insert_link_conversion_map_str,
-        computed_properties_str,
-        appendix_properties_str,
-        basemodel_properties_str,
-        custom_annotations_str,
-        node_link_functions_str,
+        # node_conversion_map_str,
+        # insert_link_conversion_map_str,
+        # computed_properties_str,
+        # appendix_properties_str,
+        # basemodel_properties_str,
+        # custom_annotations_str,
+        # node_link_functions_str,
         orm_config_str,
     ]
     node_inner_str = "\n".join(remove_falsies(node_inner_strs))

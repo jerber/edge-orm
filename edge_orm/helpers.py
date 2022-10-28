@@ -14,6 +14,10 @@ def random_str(n: int, include_re_code: bool = True) -> str:
     return pre_str + "".join(random.choices(string.ascii_letters + string.digits, k=n))
 
 
+def random_digits(n: int) -> str:
+    return "".join(random.choices(string.digits, k=n))
+
+
 def chunk_list(lst: list[ListType], chunk_size: int) -> list[list[ListType]]:
     return [lst[i : i + chunk_size] for i in range(0, len(lst), chunk_size)]
 

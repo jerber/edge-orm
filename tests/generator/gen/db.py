@@ -37,59 +37,27 @@ class User(Node):
     created_at_: T.Union[datetime, UnsetType] = Field(UNSET, alias="created_at")
     name: str = Field(...)
     age: T.Optional[int] = Field(None)
-    _names_of_friends: T.Union[T.Optional[T.Set[str]], UnsetType] = PrivateAttr(UNSET)
+    names_of_friends_: T.Union[T.Optional[T.Set[str]], UnsetType] = Field(
+        UNSET, alias="names_of_friends"
+    )
 
     @property
     def last_updated_at(self) -> datetime:
         if self.last_updated_at_ is UNSET:
             raise errors.AppendixPropertyException("last_updated_at is unset")
-        return self.last_updated_at_
+        return self.last_updated_at_  # type: ignore
 
     @property
     def created_at(self) -> datetime:
         if self.created_at_ is UNSET:
             raise errors.AppendixPropertyException("created_at is unset")
-        return self.created_at_
+        return self.created_at_  # type: ignore
 
     @property
     def names_of_friends(self) -> T.Optional[T.Set[str]]:
-        if self._names_of_friends is UNSET:
+        if self.names_of_friends_ is UNSET:
             raise errors.ComputedPropertyException("names_of_friends is unset")
-        return self._names_of_friends
-
-    _edgedb_conversion_map: T.Dict[str, T.Dict[str, T.Union[str, bool]]] = {
-        "id": {"cast": "std::uuid", "cardinality": "One", "readonly": True},
-        "phone_number": {"cast": "std::str", "cardinality": "One", "readonly": True},
-        "last_updated_at": {
-            "cast": "std::datetime",
-            "cardinality": "One",
-            "readonly": False,
-        },
-        "created_at": {
-            "cast": "std::datetime",
-            "cardinality": "One",
-            "readonly": False,
-        },
-        "name": {"cast": "std::str", "cardinality": "One", "readonly": False},
-        "age": {"cast": "std::int16", "cardinality": "One", "readonly": False},
-        "names_of_friends": {
-            "cast": "std::str",
-            "cardinality": "Many",
-            "readonly": False,
-        },
-    }
-    _link_conversion_map: T.Dict[str, T.Dict[str, T.Union[str, bool]]] = {
-        "friends": {
-            "cast": "User",
-            "cardinality": "Many",
-            "readonly": False,
-            "required": False,
-        }
-    }
-    _computed_properties: T.ClassVar[T.Set[str]] = {"names_of_friends"}
-    _appendix_properties: T.ClassVar[T.Set[str]] = {"created_at", "last_updated_at"}
-    _basemodel_properties: T.ClassVar[T.Set[str]] = set()
-    _custom_annotations: T.ClassVar[T.Set[str]] = set()
+        return self.names_of_friends_  # type: ignore
 
     EdgeConfig: T.ClassVar[EdgeConfigBase] = EdgeConfigBase(
         model_name="User",
@@ -179,23 +147,6 @@ class UserInsert(Insert):
     age: T.Union[int, None, UnsetType] = Field(UNSET)
     friends: T.Optional[UserResolver] = None
 
-    _edgedb_conversion_map: T.Dict[str, T.Dict[str, T.Union[str, bool]]] = {
-        "id": {"cast": "std::uuid", "cardinality": "One", "readonly": True},
-        "phone_number": {"cast": "std::str", "cardinality": "One", "readonly": True},
-        "last_updated_at": {
-            "cast": "std::datetime",
-            "cardinality": "One",
-            "readonly": False,
-        },
-        "created_at": {
-            "cast": "std::datetime",
-            "cardinality": "One",
-            "readonly": False,
-        },
-        "name": {"cast": "std::str", "cardinality": "One", "readonly": False},
-        "age": {"cast": "std::int16", "cardinality": "One", "readonly": False},
-    }
-
 
 class UserPatch(Patch):
     last_updated_at: T.Union[T.Optional[datetime], UnsetType] = Field(UNSET)
@@ -205,21 +156,6 @@ class UserPatch(Patch):
     friends: T.Union[T.Optional[UserResolver], UnsetType] = Field(
         default_factory=UnsetType
     )
-
-    _edgedb_conversion_map: T.Dict[str, T.Dict[str, T.Union[str, bool]]] = {
-        "last_updated_at": {
-            "cast": "std::datetime",
-            "cardinality": "One",
-            "readonly": False,
-        },
-        "created_at": {
-            "cast": "std::datetime",
-            "cardinality": "One",
-            "readonly": False,
-        },
-        "name": {"cast": "std::str", "cardinality": "One", "readonly": False},
-        "age": {"cast": "std::int16", "cardinality": "One", "readonly": False},
-    }
 
 
 class UserResolver(Resolver[User, UserInsert, UserPatch]):
@@ -349,25 +285,6 @@ class DateModel(Node):
     created_at: datetime = Field(...)
     last_updated_at: datetime = Field(...)
 
-    _edgedb_conversion_map: T.Dict[str, T.Dict[str, T.Union[str, bool]]] = {
-        "id": {"cast": "std::uuid", "cardinality": "One", "readonly": True},
-        "created_at": {
-            "cast": "std::datetime",
-            "cardinality": "One",
-            "readonly": False,
-        },
-        "last_updated_at": {
-            "cast": "std::datetime",
-            "cardinality": "One",
-            "readonly": False,
-        },
-    }
-    _link_conversion_map: T.Dict[str, T.Dict[str, T.Union[str, bool]]] = {}
-    _computed_properties: T.ClassVar[T.Set[str]] = set()
-    _appendix_properties: T.ClassVar[T.Set[str]] = set()
-    _basemodel_properties: T.ClassVar[T.Set[str]] = set()
-    _custom_annotations: T.ClassVar[T.Set[str]] = set()
-
     EdgeConfig: T.ClassVar[EdgeConfigBase] = EdgeConfigBase(
         model_name="DateModel",
         client=CLIENT,
@@ -424,37 +341,10 @@ class DateModelInsert(Insert):
     created_at: T.Union[datetime, UnsetType] = Field(UNSET)
     last_updated_at: T.Union[datetime, UnsetType] = Field(UNSET)
 
-    _edgedb_conversion_map: T.Dict[str, T.Dict[str, T.Union[str, bool]]] = {
-        "id": {"cast": "std::uuid", "cardinality": "One", "readonly": True},
-        "created_at": {
-            "cast": "std::datetime",
-            "cardinality": "One",
-            "readonly": False,
-        },
-        "last_updated_at": {
-            "cast": "std::datetime",
-            "cardinality": "One",
-            "readonly": False,
-        },
-    }
-
 
 class DateModelPatch(Patch):
     created_at: T.Union[T.Optional[datetime], UnsetType] = Field(UNSET)
     last_updated_at: T.Union[T.Optional[datetime], UnsetType] = Field(UNSET)
-
-    _edgedb_conversion_map: T.Dict[str, T.Dict[str, T.Union[str, bool]]] = {
-        "created_at": {
-            "cast": "std::datetime",
-            "cardinality": "One",
-            "readonly": False,
-        },
-        "last_updated_at": {
-            "cast": "std::datetime",
-            "cardinality": "One",
-            "readonly": False,
-        },
-    }
 
 
 class DateModelResolver(Resolver[DateModel, DateModelInsert, DateModelPatch]):
