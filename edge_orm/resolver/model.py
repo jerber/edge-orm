@@ -3,7 +3,7 @@ import edgedb
 from pydantic import BaseModel, PrivateAttr
 from edge_orm.node import Node, Insert, Patch
 from edge_orm.logs import logger
-from edge_orm import helpers
+from edge_orm import helpers, execute, span
 from . import enums, errors
 from .nested_resolvers import NestedResolvers
 from devtools import debug
@@ -374,18 +374,41 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
         query_str, variables = self.full_query_str_and_vars(
             include_select=True, prefix=""
         )
-        # now what about vars
-        print(query_str)
-        from devtools import debug
+        with span.span(
+            op=f"edgedb.query.{self._node_cls.EdgeConfig.model_name}",
+            description=query_str[:200],
+        ):
+            raw_response = await execute.query(
+                client=client or self._node_cls.EdgeConfig.client,
+                query_str=query_str,
+                variables=variables,
+                only_one=False,
+            )
+            if not isinstance(raw_response, list):
+                raise errors.ResolverException(
+                    f"Expected a list from query, got {raw_response}"
+                )
 
-        debug(variables)
+        with span.span(
+            op=f"parse.{self._node_cls.EdgeConfig.model_name}",
+            description=str(len(raw_response)),
+        ):
+            if not raw_response:
+                return []
+            return [self._node_cls(**d) for d in raw_response]
 
-        ...
-
-    async def query_one(self) -> NodeType:
-        # TODO
-        # DOCS
-        ...
+    async def query_first(
+        self, client: edgedb.AsyncIOClient | None = None
+    ) -> NodeType | None:
+        if self._limit is not None and self._limit > 1:
+            raise errors.ResolverException(
+                f"Limit is set to {self._limit} so you cannot query_first."
+            )
+        self._limit = 1
+        model_lst = await self.query(client=client)
+        if not model_lst:
+            return None
+        return model_lst[0]
 
     async def _get(
         self, *, client: edgedb.AsyncIOClient | None = None, **kwargs: T.Any

@@ -7,8 +7,7 @@ from tests.generator.gen import db_hydrated as db
 from devtools import debug
 import tests
 
-
-logger.setLevel(0)
+import asyncio
 
 
 def now() -> datetime:
@@ -175,17 +174,15 @@ def test_node_relationship() -> None:
 async def test_query() -> None:
     rez = (
         db.UserResolver()
-        .filter_by(name="Paul Graham", age=20)
+        .include_computed_properties()
+        .include_appendix_properties()
+        # .filter_by(name="Paul Graham")
         .friends(
             db.UserResolver()
             .limit(10)
             .offset(0)
             .filter_by(name="Paul Graham")
-            .friends(
-                db.UserResolver().filter_by(
-                    phone_number="+149089009i", names_of_friends={"jushd", "ds"}
-                )
-            )
+            .friends(db.UserResolver().filter_by(phone_number="+149089009i"))
             .friends(db.UserResolver().filter_by(age=23))
             .friends(db.UserResolver().filter_by(phone_number="_20i35409i"))
         )
@@ -193,4 +190,13 @@ async def test_query() -> None:
         .offset(0)
         .order_by(".created_at DESC")
     )
-    await rez.query()
+    users = await rez.query()
+    debug(users)
+
+
+async def main() -> None:
+    await test_query()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

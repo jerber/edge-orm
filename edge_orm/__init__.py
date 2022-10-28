@@ -1,8 +1,8 @@
+from .logs import create_logger, logger
 from .unset import UNSET, UnsetType
 from .node import Node, NodeException, Insert, Patch, EdgeConfigBase
 from .resolver import Resolver, ResolverException
 from .resolver import enums as resolver_enums
-from .logs import create_logger, logger
 from . import types_generator, validators
 
 __all__ = [

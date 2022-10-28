@@ -31,7 +31,7 @@ async def query(
     query_str: str,
     variables: dict[str, T.Any] | None = None,
     only_one: bool,
-) -> dict[str, T.Any] | None:
+) -> T.Any | None:
     if variables is None:
         variables = {}
     # TODO usually would simplify vars here but should do this in earlier step
