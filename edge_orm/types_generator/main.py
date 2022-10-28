@@ -416,9 +416,9 @@ def build_node_and_resolver(
         if prop.is_exclusive:
             exclusive_fields.add(prop.name)
         default_value_str = "..." if prop.required else "None"
-        allow_mutation_str = (
-            f"allow_mutation={not prop.readonly and not prop.is_computed}"
-        )
+        # allow_mutation_str = (
+        #     f"allow_mutation={not prop.readonly and not prop.is_computed}"
+        # )
         if node_config and prop.name in node_config.basemodel_properties:
             prop_config = node_config.basemodel_properties[prop.name]
             module_name = prop_config.module_name
@@ -433,7 +433,7 @@ def build_node_and_resolver(
             type_str = prop.type_str
         if not (prop.is_computed or is_appendix):
             property_strs.append(
-                f"{prop.name}: {type_str} = Field({default_value_str}, {allow_mutation_str})"
+                f"{prop.name}: {type_str} = Field({default_value_str})"
             )
         else:
             if prop.is_computed:
@@ -444,6 +444,7 @@ def build_node_and_resolver(
                 exception_name = "AppendixPropertyException"
                 property_name = f"{prop.name}_"
                 property_str = f'{property_name}: T.Union[{type_str}, UnsetType] = Field(UNSET, alias="{prop.name}")'
+            exception_name = f"errors.{exception_name}"
             property_strs.append(property_str)
             val_str = "val"
             if "Set[" in type_str:
@@ -453,22 +454,18 @@ def build_node_and_resolver(
 @property
 def {prop.name}(self) -> {type_str}:
     if self.{property_name} is UNSET:
-        if "{prop.name}" in self.extra:
-            val = self.extra["{prop.name}"]
-            self.{property_name} = {val_str}
-        else:
             raise {exception_name}("{prop.name} is unset")
     return self.{property_name}
                 """
             )
-            if not prop.is_computed:
-                computed_property_getter_strs.append(
-                    f"""
-@{prop.name}.setter
-def {prop.name}(self, {prop.name}: {type_str}) -> None:
-    self.{property_name} = {prop.name}
-                    """
-                )
+        #             if not prop.is_computed:
+        #                 computed_property_getter_strs.append(
+        #                     f"""
+        # @{prop.name}.setter
+        # def {prop.name}(self, {prop.name}: {type_str}) -> None:
+        #     self.{property_name} = {prop.name}
+        #                     """
+        #                 )
         if prop.name != "id" or allow_inserting_id:
             # for insert type
             if not prop.is_computed and not prop.not_insertable:
@@ -599,7 +596,7 @@ def {prop.name}(self, {prop.name}: {type_str}) -> None:
 
     computed_property_getter_str = "\n".join(computed_property_getter_strs)
     node_conversion_map_str = f"_edgedb_conversion_map: T.Dict[str, T.Dict[str, T.Union[str, bool]]] = {stringify_dict(node_edgedb_conversion_map)}"
-    insert_link_conversion_map_str = f"_link_conversion_map: T.ClassVar[T.Dict[str, str]] = {stringify_dict(link_conversion_map)}"
+    insert_link_conversion_map_str = f"_link_conversion_map: T.Dict[str, T.Dict[str, T.Union[str, bool]]] = {stringify_dict(link_conversion_map)}"
     computed_properties_str = f"_computed_properties: T.ClassVar[T.Set[str]] = {stringify_set(computed_properties)}"
     appendix_properties_str = f"_appendix_properties: T.ClassVar[T.Set[str]] = {stringify_set(appendix_properties)}"
 

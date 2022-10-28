@@ -29,52 +29,32 @@ CLIENT = create_async_client(dsn=os.environ["EDGEDB_DSN"])
 
 
 class User(Node):
-    id: UUID = Field(..., allow_mutation=False)
-    phone_number: str = Field(..., allow_mutation=False)
+    id: UUID = Field(...)
+    phone_number: str = Field(...)
     last_updated_at_: T.Union[datetime, UnsetType] = Field(
         UNSET, alias="last_updated_at"
     )
     created_at_: T.Union[datetime, UnsetType] = Field(UNSET, alias="created_at")
-    name: str = Field(..., allow_mutation=True)
-    age: T.Optional[int] = Field(None, allow_mutation=True)
+    name: str = Field(...)
+    age: T.Optional[int] = Field(None)
     _names_of_friends: T.Union[T.Optional[T.Set[str]], UnsetType] = PrivateAttr(UNSET)
 
     @property
     def last_updated_at(self) -> datetime:
         if self.last_updated_at_ is UNSET:
-            if "last_updated_at" in self.extra:
-                val = self.extra["last_updated_at"]
-                self.last_updated_at_ = val
-            else:
-                raise AppendixPropertyException("last_updated_at is unset")
+            raise errors.AppendixPropertyException("last_updated_at is unset")
         return self.last_updated_at_
-
-    @last_updated_at.setter
-    def last_updated_at(self, last_updated_at: datetime) -> None:
-        self.last_updated_at_ = last_updated_at
 
     @property
     def created_at(self) -> datetime:
         if self.created_at_ is UNSET:
-            if "created_at" in self.extra:
-                val = self.extra["created_at"]
-                self.created_at_ = val
-            else:
-                raise AppendixPropertyException("created_at is unset")
+            raise errors.AppendixPropertyException("created_at is unset")
         return self.created_at_
-
-    @created_at.setter
-    def created_at(self, created_at: datetime) -> None:
-        self.created_at_ = created_at
 
     @property
     def names_of_friends(self) -> T.Optional[T.Set[str]]:
         if self._names_of_friends is UNSET:
-            if "names_of_friends" in self.extra:
-                val = self.extra["names_of_friends"]
-                self._names_of_friends = val if type(val) != list else set(val)
-            else:
-                raise ComputedPropertyException("names_of_friends is unset")
+            raise errors.ComputedPropertyException("names_of_friends is unset")
         return self._names_of_friends
 
     _edgedb_conversion_map: T.Dict[str, T.Dict[str, T.Union[str, bool]]] = {
@@ -98,7 +78,7 @@ class User(Node):
             "readonly": False,
         },
     }
-    _link_conversion_map: T.ClassVar[T.Dict[str, str]] = {
+    _link_conversion_map: T.Dict[str, T.Dict[str, T.Union[str, bool]]] = {
         "friends": {
             "cast": "User",
             "cardinality": "Many",
@@ -393,9 +373,9 @@ class UserResolver(Resolver[User, UserInsert, UserPatch]):
 
 
 class DateModel(Node):
-    id: UUID = Field(..., allow_mutation=False)
-    created_at: datetime = Field(..., allow_mutation=True)
-    last_updated_at: datetime = Field(..., allow_mutation=True)
+    id: UUID = Field(...)
+    created_at: datetime = Field(...)
+    last_updated_at: datetime = Field(...)
 
     _edgedb_conversion_map: T.Dict[str, T.Dict[str, T.Union[str, bool]]] = {
         "id": {"cast": "std::uuid", "cardinality": "One", "readonly": True},
@@ -410,7 +390,7 @@ class DateModel(Node):
             "readonly": False,
         },
     }
-    _link_conversion_map: T.ClassVar[T.Dict[str, str]] = {}
+    _link_conversion_map: T.Dict[str, T.Dict[str, T.Union[str, bool]]] = {}
     _computed_properties: T.ClassVar[T.Set[str]] = set()
     _appendix_properties: T.ClassVar[T.Set[str]] = set()
     _basemodel_properties: T.ClassVar[T.Set[str]] = set()

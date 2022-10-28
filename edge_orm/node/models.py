@@ -28,15 +28,24 @@ class EdgeConfigBase(BaseModel):
         arbitrary_types_allowed = True
 
 
+COMPUTED = dict[str, T.Any]
+
+
 class Node(BaseModel):
-    id: UUID = Field(..., allow_mutation=False)
+    id: UUID
+
+    EdgeConfig: T.ClassVar[EdgeConfigBase]
+
+    _computed: COMPUTED = PrivateAttr(default=dict())
+
+    @property
+    def computed(self) -> COMPUTED:
+        return self._computed
 
     class Config:
         allow_mutation = False
         validate_assignment = True
         arbitrary_types_allowed = True
-
-    EdgeConfig: T.ClassVar[EdgeConfigBase]
 
 
 NodeType = T.TypeVar("NodeType", bound=Node)

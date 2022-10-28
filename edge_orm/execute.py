@@ -60,7 +60,7 @@ async def query(
             f"EdgeDB Query Exception: {e}, query_str and variables: {query_str=}, {variables=}"
         )
         raise e
-    took_ms = (time.process_time() - start) * 1_000
+    took_ms = round((time.process_time() - start) * 1_000, 2)
     logger.debug(query_str)
     logger.debug(f"took {took_ms} ms")
     return response_dict
