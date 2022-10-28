@@ -43,19 +43,22 @@ class User(Node):
 
     @property
     def last_updated_at(self) -> datetime:
-        if self.last_updated_at_ is UNSET:
+        # if self.last_updated_at_ is UNSET:
+        if "last_updated_at_" not in self.__fields_set__:
             raise errors.AppendixPropertyException("last_updated_at is unset")
         return self.last_updated_at_  # type: ignore
 
     @property
     def created_at(self) -> datetime:
-        if self.created_at_ is UNSET:
+        # if self.created_at_ is UNSET:
+        if "created_at_" not in self.__fields_set__:
             raise errors.AppendixPropertyException("created_at is unset")
         return self.created_at_  # type: ignore
 
     @property
     def names_of_friends(self) -> T.Optional[T.Set[str]]:
-        if self.names_of_friends_ is UNSET:
+        # if self.names_of_friends_ is UNSET:
+        if "names_of_friends_" not in self.__fields_set__:
             raise errors.ComputedPropertyException("names_of_friends is unset")
         return self.names_of_friends_  # type: ignore
 
@@ -162,35 +165,19 @@ class UserResolver(Resolver[User, UserInsert, UserPatch]):
     _node_cls = User
 
     def friends(
-        self,
-        _: T.Optional[UserResolver] = None,
-        /,
-        ignore_if_subset: bool = False,
-        make_first: bool = False,
+        self, _: T.Optional[UserResolver] = None, /, make_first: bool = False
     ) -> UserResolver:
         self._nested_resolvers.add(
-            "friends",
-            _ or UserResolver(),
-            ignore_if_subset=ignore_if_subset,
-            make_first=make_first,
+            "friends", _ or UserResolver(), make_first=make_first
         )
         return self
 
     def friends__count(
-        self,
-        _: T.Optional[UserResolver] = None,
-        /,
-        ignore_if_subset: bool = False,
-        make_first: bool = False,
+        self, _: T.Optional[UserResolver] = None, /, make_first: bool = False
     ) -> UserResolver:
         rez = _ or UserResolver()
         rez.is_count = True
-        self._nested_resolvers.add(
-            "friends__count",
-            rez,
-            ignore_if_subset=ignore_if_subset,
-            make_first=make_first,
-        )
+        self._nested_resolvers.add("friends__count", rez, make_first=make_first)
         return self
 
     async def get(

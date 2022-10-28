@@ -9,7 +9,7 @@ RE_CODE = "04730"
 ListType = T.TypeVar("ListType")
 
 
-def random_str(n: int, include_re_code: bool = True) -> str:
+def random_str(n: int, include_re_code: bool = False) -> str:
     pre_str = RE_CODE if include_re_code else ""
     return pre_str + "".join(random.choices(string.ascii_letters + string.digits, k=n))
 

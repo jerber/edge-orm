@@ -6,6 +6,7 @@ from edge_orm.logs import logger
 from edge_orm import helpers
 from . import enums, errors
 from .nested_resolvers import NestedResolvers
+from devtools import debug
 
 NodeType = T.TypeVar("NodeType", bound=Node)
 InsertType = T.TypeVar("InsertType", bound=Insert)
@@ -36,11 +37,15 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
 
     _node_cls: T.ClassVar[T.Type[NodeType]]  # type: ignore
 
+    is_count: bool = False
+
     def __init__(self, **data: T.Any) -> None:
         super().__init__(**data)
         if not self._fields_to_return:
             self._fields_to_return = (
-                self.node_field_names() - self.node_appendix_properties()
+                self.node_field_names()
+                - self.node_appendix_properties()
+                - self.node_computed_properties()
             )
 
     @classmethod
@@ -118,7 +123,10 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
         variables = {}
         for field_name, field_value in kwargs.items():
             cast = conversion_map[field_name]["cast"]
-            variable_name = f"{field_name}{helpers.random_str(10)}"
+            # variable_name = (
+            #     f"{field_name}{helpers.random_str(10, include_re_code=True)}"
+            # )
+            variable_name = field_name
             filter_strs.append(f".{field_name} = <{cast}>${variable_name}")
             variables[variable_name] = field_value
         filter_str = " AND ".join(filter_strs)
@@ -139,7 +147,10 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
         variables = {}
         for field_name, value_lst in kwargs.items():
             cast = conversion_map[field_name]["cast"]
-            variable_name = f"{field_name}s{helpers.random_str(10)}"
+            # variable_name = (
+            #     f"{field_name}s{helpers.random_str(10, include_re_code=True)}"
+            # )
+            variable_name = field_name
             if cast.startswith("default::"):  # if an enum or other scalar
                 s = f".{field_name} in <{cast}>array_unpack(<array<str>>${variable_name})"
             else:
@@ -258,13 +269,18 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
         return s
 
     def build_return_fields_str(self) -> str:
-        non_nested_fields: list[str] = sorted(
-            [*self._fields_to_return, *self._extra_fields]
+        fields_strs: list[str] = sorted(
+            [
+                *self._fields_to_return,
+                *self._extra_fields,
+                self._nested_resolvers.build_query_str(),
+            ]
         )
-        return ", ".join(non_nested_fields)
+        return ", ".join([s for s in fields_strs if s])
 
-    def full_query_str(self) -> str:
-        s = f"SELECT {self._node_cls.__name__} {{ {self.build_return_fields_str()} }}"
+    def full_query_str(self, include_select: bool) -> str:
+        select = f"SELECT {self._node_cls.__name__} " if include_select else ""
+        s = f"{select}{{ {self.build_return_fields_str()} }}"
         if filters_str := self.build_filters_str():
             s += f" {filters_str}"
         return s
@@ -325,9 +341,15 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
 
     """QUERY METHODS"""
 
-    async def query(self) -> T.List[NodeType]:
-        # TODO
-        # DOCS
+    async def query(
+        self, client: edgedb.AsyncIOClient | None = None
+    ) -> T.List[NodeType]:
+        # TODO merge
+        query_str = self.full_query_str(include_select=True)
+        print(query_str)
+        from devtools import debug
+
+        debug(self._query_variables)
         ...
 
     async def query_one(self) -> NodeType:

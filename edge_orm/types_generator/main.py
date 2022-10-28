@@ -158,17 +158,16 @@ async def {link.name}__count(
 def build_resolver_link_function_str(node_resolver_name: str, link: Link) -> str:
     link_resolver_name = f"{link.target.model_name}Resolver"
     return f"""
-def {link.name}(self, _: T.Optional[{link_resolver_name}] = None, /, ignore_if_subset: bool = False, make_first: bool = False) -> {node_resolver_name}:
-    self._nested_resolvers.add("{link.name}", _ or {link_resolver_name}(), ignore_if_subset=ignore_if_subset, make_first=make_first)
+def {link.name}(self, _: T.Optional[{link_resolver_name}] = None, /, make_first: bool = False) -> {node_resolver_name}:
+    self._nested_resolvers.add("{link.name}", _ or {link_resolver_name}(), make_first=make_first)
     return self
 
-def {link.name}__count(self, _: T.Optional[{link_resolver_name}] = None, /, ignore_if_subset: bool = False, make_first: bool = False) -> {node_resolver_name}:
+def {link.name}__count(self, _: T.Optional[{link_resolver_name}] = None, /, make_first: bool = False) -> {node_resolver_name}:
     rez = _ or {link_resolver_name}()
     rez.is_count = True
     self._nested_resolvers.add(
         "{link.name}__count",
         rez,
-        ignore_if_subset=ignore_if_subset,
         make_first=make_first
     )
     return self
@@ -455,7 +454,8 @@ def build_node_and_resolver(
                 f"""
 @property
 def {prop.name}(self) -> {type_str}:
-    if self.{property_name} is UNSET:
+    # if self.{property_name} is UNSET:
+    if "{property_name}" not in self.__fields_set__:
             raise {exception_name}("{prop.name} is unset")
     return self.{property_name} # type: ignore
                 """

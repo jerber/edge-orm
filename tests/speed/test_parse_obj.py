@@ -15,13 +15,15 @@ def test_build_user() -> None:
         name="Huan PR",
         age=11,
         names_of_friends=["Juandala", "huc"],
-        ids_of_friends=[15, f"dfd"],
+        # ids_of_friends=["jhi"],
     )
     # user._ids_of_friends = ["juds", "dsj"]
-    debug(user)
+    # debug(user)
+    debug(user.__fields_set__)
 
     print(f"{user.names_of_friends=}")
-    print(f"{user.ids_of_friends=}")
+    assert user.names_of_friends == set(["Juandala", "huc"])
+    # print(f"{user.ids_of_friends=}")
     # print(f"{user._created_at}")
     # print(f"{user._last_updated}")
     debug(user)

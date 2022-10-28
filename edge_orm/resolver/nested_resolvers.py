@@ -5,7 +5,7 @@ from pydantic import BaseModel
 if T.TYPE_CHECKING:
     from .model import Resolver
 
-ResolverType = T.TypeVar("ResolverType", bound="Resolver")  # type: ignore
+ResolverType = T.TypeVar("ResolverType", bound="Resolver")
 
 SEPARATOR = "_*EDGE*_"
 
@@ -25,7 +25,7 @@ class NestedResolvers(BaseModel):
         resolver: ResolverType,
         *,
         merge: bool = False,
-        make_first: bool = False
+        make_first: bool = False,
     ) -> None:
         # TODO do merge... i guess worry about this later
         if not self.has(edge):
@@ -57,3 +57,24 @@ class NestedResolvers(BaseModel):
                 merged_nested_resolvers.add(edge=edge, resolver=r, merge=True)
         return merged_nested_resolvers
     """
+
+    def edge_to_query_str(self, edge: str) -> str:
+        resolvers: list["Resolver"] = self.get(edge)
+        resolvers_str = []
+        for i, r in enumerate(resolvers):
+            if i == 0:
+                if r.is_count and "__count" in edge:
+                    # avoid not copying resolver and having it break. make SURE it is a count
+                    resolver_s = f'{edge} := COUNT((SELECT .{edge.split("__")[0]} {r.build_filters_str()}))'
+                else:
+                    resolver_s = f"{edge}: {r.full_query_str(include_select=False)}"
+            else:
+                if r.is_count and "__count in edge":
+                    resolver_s = f"{edge}{SEPARATOR}{i} := COUNT((SELECT .{edge.split('__')[0]} {r.build_filters_str()}))"
+                else:
+                    resolver_s = f"{edge}{SEPARATOR}{i} := (SELECT .{edge} {r.full_query_str(include_select=False)})"
+            resolvers_str.append(resolver_s)
+        return ", ".join(resolvers_str)
+
+    def build_query_str(self) -> str:
+        return ", ".join([self.edge_to_query_str(e) for e in self.d.keys()])

@@ -137,7 +137,7 @@ def test_fields_to_return() -> None:
     assert rez.build_return_fields_str() == return_fields_str
     rez.limit(20).filter("exists .friends")
     assert (
-        rez.full_query_str()
+        rez.full_query_str(include_select=True)
         == f"SELECT User {{ {return_fields_str} }} FILTER exists .friends LIMIT 20"
     )
 
@@ -168,3 +168,16 @@ def test_subset() -> None:
 def test_node_relationship() -> None:
     rez = db.UserResolver()
     assert "hi" not in rez._node_cls.EdgeConfig.appendix_properties
+
+
+@pytest.mark.asyncio
+async def test_query() -> None:
+    rez = (
+        db.UserResolver()
+        .filter_by(name="Paul")
+        .friends(db.UserResolver().limit(10).offset(0).friends())
+        .limit(10)
+        .offset(0)
+        .order_by(".created_at DESC")
+    )
+    await rez.query()
