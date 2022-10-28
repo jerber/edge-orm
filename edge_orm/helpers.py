@@ -5,6 +5,8 @@ import re
 
 ALIAS_PATTERN = r">\$(\w+)"
 RE_CODE = "04730"
+SEPARATOR = "__"
+
 
 ListType = T.TypeVar("ListType")
 

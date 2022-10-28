@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from edge_orm import ResolverException, resolver_enums, logger
 from tests.generator.gen import db_hydrated as db
+from devtools import debug
 import tests
 
 
@@ -174,8 +175,20 @@ def test_node_relationship() -> None:
 async def test_query() -> None:
     rez = (
         db.UserResolver()
-        .filter_by(name="Paul")
-        .friends(db.UserResolver().limit(10).offset(0).friends())
+        .filter_by(name="Paul Graham", age=20)
+        .friends(
+            db.UserResolver()
+            .limit(10)
+            .offset(0)
+            .filter_by(name="Paul Graham")
+            .friends(
+                db.UserResolver().filter_by(
+                    phone_number="+149089009i", names_of_friends={"jushd", "ds"}
+                )
+            )
+            .friends(db.UserResolver().filter_by(age=23))
+            .friends(db.UserResolver().filter_by(phone_number="_20i35409i"))
+        )
         .limit(10)
         .offset(0)
         .order_by(".created_at DESC")

@@ -226,11 +226,10 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
         self: ThisResolverType,
         field_name: str,
         expression: str,
-        variables: VARS | None = None,
         conversion_func: CONVERSION_FUNC | None = None,
     ) -> ThisResolverType:
+        """extra fields do NOT take in variables"""
         extra_field_str = f"{field_name} := {expression}"
-        self.add_query_variables(variables)
         self._extra_fields.add(extra_field_str)
         if conversion_func:
             self._extra_fields_conversion_funcs[field_name] = conversion_func
@@ -258,7 +257,8 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
             return ""
         return f"OFFSET {self._offset}"
 
-    def build_filters_str(self) -> str:
+    def build_filters_str_and_vars(self, prefix: str) -> tuple[str, VARS]:
+        """Only returning the vars for THIS obj"""
         s_lst = [
             self._filter_str(),
             self._order_by_str(),
@@ -266,30 +266,54 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
             self._limit_str(),
         ]
         s = " ".join([s for s in s_lst if s])
-        return s
+        if prefix:
+            # regex out the vars to include this prefix
+            new_prefix = f"{prefix}{helpers.SEPARATOR}"
+            new_s = s.replace("$", f"${new_prefix}")
+            new_vars = {f"{new_prefix}{k}": v for k, v in self._query_variables.items()}
+            return new_s, new_vars
+        else:
+            return s, self._query_variables
 
-    def build_return_fields_str(self) -> str:
-        fields_strs: list[str] = sorted(
-            [
-                *self._fields_to_return,
-                *self._extra_fields,
-                self._nested_resolvers.build_query_str(),
-            ]
-        )
-        return ", ".join([s for s in fields_strs if s])
-
-    def full_query_str(self, include_select: bool) -> str:
+    def full_query_str_and_vars(
+        self,
+        include_select: bool,
+        prefix: str,
+        check_for_intersecting_variables: bool = False,
+    ) -> tuple[str, VARS]:
         select = f"SELECT {self._node_cls.__name__} " if include_select else ""
-        s = f"{select}{{ {self.build_return_fields_str()} }}"
-        if filters_str := self.build_filters_str():
+        (
+            nested_query_str,
+            nested_vars,
+        ) = self._nested_resolvers.build_query_str_and_vars(prefix=prefix)
+
+        brackets_strs = [*self._fields_to_return, *self._extra_fields, nested_query_str]
+        brackets_str = ", ".join(sorted([s for s in brackets_strs if s]))
+
+        s = f"{select}{{ {brackets_str} }}"
+        filters_str, query_vars = self.build_filters_str_and_vars(prefix=prefix)
+        if filters_str:
             s += f" {filters_str}"
-        return s
+
+        if check_for_intersecting_variables:
+            # this is unlikely to happen because of the separator and prefix but just for sanity you can do this
+            # if you do not have "__" in your variables this *is* impossible
+            if inters := (query_vars.keys() & nested_vars.keys()):
+                for var_name in inters:
+                    if query_vars[var_name] != nested_vars[var_name]:
+                        raise errors.ResolverException(
+                            f"Variable {var_name} was given multiple times with different values: "
+                            f"{query_vars[var_name]} != {nested_vars[var_name]}"
+                        )
+
+        return s, {**query_vars, **nested_vars}
 
     """MERGING LOGIC"""
 
     def build_hydrated_filters_str(self) -> str:
+        filters_str, _ = self.build_filters_str_and_vars(prefix="")
         return helpers.replace_str_with_vars(
-            s=self.build_filters_str(), variables=self._query_variables
+            s=filters_str, variables=self._query_variables
         )
 
     def is_subset_of(self, other: "Resolver") -> bool:  # type: ignore
@@ -325,9 +349,11 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
 
         # PROs of this... it should be very safe since you are comparing the actual VARS
         # cons, it could be overly restrictive. If one is called $start_time vs $startTime it will break...fine tho
-        if self.build_filters_str() != other.build_filters_str():
+        self_filters_str, _ = self.build_filters_str_and_vars(prefix="")
+        other_filters_str, _ = other.build_filters_str_and_vars(prefix="")
+        if self_filters_str != other_filters_str:
             logger.debug(
-                f"{self.__class__.__name__}: {self.build_filters_str()=} != {other.build_filters_str()}"
+                f"{self.__class__.__name__}: {self_filters_str=} != {other_filters_str}"
             )
             return False
 
@@ -345,11 +371,15 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
         self, client: edgedb.AsyncIOClient | None = None
     ) -> T.List[NodeType]:
         # TODO merge
-        query_str = self.full_query_str(include_select=True)
+        query_str, variables = self.full_query_str_and_vars(
+            include_select=True, prefix=""
+        )
+        # now what about vars
         print(query_str)
         from devtools import debug
 
-        debug(self._query_variables)
+        debug(variables)
+
         ...
 
     async def query_one(self) -> NodeType:
