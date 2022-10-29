@@ -120,6 +120,8 @@ def test_fields_to_return() -> None:
         "names_of_friends",
         "created_at",
         "last_updated_at",
+        "user_role",
+        "images",
     }
     extra_field_1 = ["friends_names := .friends.name", "friends_ids := .friends.ids"]
     rez.extra_field("friends_names", ".friends.name")
@@ -130,7 +132,7 @@ def test_fields_to_return() -> None:
     rez.extra_field("friends_fb_ids", ".friends.auth_id")
     assert rez._extra_fields == {*extra_field_1, extra_field_2}
 
-    return_fields_str = "created_at, friends_fb_ids := .friends.auth_id, friends_ids := .friends.ids, friends_names := .friends.name, id, last_updated_at, name, names_of_friends"
+    return_fields_str = "created_at, friends_fb_ids := .friends.auth_id, friends_ids := .friends.ids, friends_names := .friends.name, id, images, last_updated_at, name, names_of_friends, user_role"
 
     # assert rez.build_return_fields_str() == return_fields_str
     rez.limit(20).filter("exists .friends")
@@ -216,9 +218,31 @@ async def test_gets() -> None:
         user = await db.UserResolver().gerror(phone_number=phone_number)
 
 
+from edge_orm.resolver.utils import model_to_set_str_vars
+
+
+@pytest.mark.asyncio
+async def test_model_to_set_str_vars() -> None:
+    insert = db.UserInsert(name="Juana", phone_number="+14028939830099", email="fdij")
+    s, variables = model_to_set_str_vars(
+        model=insert, conversion_map=db.User.EdgeConfig.insert_edgedb_conversion_map
+    )
+    print(f"{s=}")
+    debug(variables)
+    assert len(variables) == 2
+    user = (
+        await db.UserResolver()
+        .friends(db.UserResolver().filter_by(phone_number="4-03i-0k"))
+        .insert_one(insert=insert)
+    )
+    debug(user)
+
+
+"""
 async def main() -> None:
     await test_query()
 
 
 if __name__ == "__main__":
     asyncio.run(main())
+"""

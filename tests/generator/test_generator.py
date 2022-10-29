@@ -1,6 +1,12 @@
 import pytest
 from pathlib import Path
-from edge_orm.types_generator import DBConfig, DBVendor, generate, NodeConfig
+from edge_orm.types_generator import (
+    DBConfig,
+    DBVendor,
+    generate,
+    NodeConfig,
+    PropertyConfig,
+)
 
 import tests
 
@@ -10,7 +16,22 @@ db_config_map: dict[str, DBConfig] = {
         dsn="EDGEDB_DSN",
         hydrate=True,
         nodes={
-            "User": NodeConfig(appendix_properties=["created_at", "last_updated_at"])
+            "User": NodeConfig(
+                appendix_properties=[
+                    "created_at",
+                    "last_updated_at",
+                    "user_role",
+                    "images",
+                    "email",
+                ],
+                basemodel_properties={
+                    "email": PropertyConfig(
+                        module_name="EmailStr",
+                        module_path="pydantic",
+                        validate_as_basemodel=False,
+                    )
+                },
+            )
         },
     )
 }

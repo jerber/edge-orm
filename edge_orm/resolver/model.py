@@ -5,7 +5,7 @@ from pydantic.main import ModelMetaclass
 from edge_orm.node import Node, Insert, Patch, EdgeConfigBase
 from edge_orm.logs import logger
 from edge_orm import helpers, execute, span
-from . import enums, errors
+from . import enums, errors, utils
 from .nested_resolvers import NestedResolvers
 from devtools import debug
 
@@ -280,8 +280,10 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         prefix: str,
         include_filters: bool = True,
         check_for_intersecting_variables: bool = False,
+        model_name_override: str = None,
     ) -> tuple[str, VARS]:
-        select = f"SELECT {self._node_config.model_name} " if include_select else ""
+        model_name = model_name_override or self._node_config.model_name
+        select = f"SELECT {model_name} " if include_select else ""
         (
             nested_query_str,
             nested_vars,
@@ -425,7 +427,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         if existing_filter_str := self.has_filters():
             raise errors.ResolverException(
                 f"This resolver already has filters: {existing_filter_str}. "
-                f"If you wish to GET an object, use a resolver that does not have filters."
+                f"If you wish to GET an object, use a resolver that does not have root filters."
             )
 
         key, value = list(kwargs.items())[0]
@@ -467,8 +469,29 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
     async def insert_one(
         self, insert: InsertType, *, client: edgedb.AsyncIOClient | None = None
     ) -> NodeType:
-        # TODO merge
-        ...
+        if existing_filter_str := self.has_filters():
+            raise errors.ResolverException(
+                f"This resolver already has filters: {existing_filter_str}. "
+                f"If you wish to INSERT an object, use a resolver that does not have root filters."
+            )
+        insert_s, insert_variables = utils.model_to_set_str_vars(
+            model=insert, conversion_map=self._node_config.insert_edgedb_conversion_map
+        )
+        insert_s = f"INSERT {self._node_config.model_name} {insert_s}"
+        # do not need the prefix since any var HAS to be nested, so will already have prefixes
+        select_s, select_variables = self.full_query_str_and_vars(
+            prefix="", model_name_override="model", include_select=True
+        )
+        final_insert_s = f"WITH model := ({insert_s}) {select_s}"
+        with span.span(op=f"edgedb.add.{self._node_config.model_name}"):
+            raw_response = await execute.query(
+                client=client or self._node_config.client,
+                query_str=final_insert_s,
+                variables={**insert_variables, **select_variables},
+                only_one=True,
+            )
+        with span.span(op=f"parse.{self._node_config.model_name}"):
+            return self._node_cls(**raw_response)
 
     async def insert_many(
         self, inserts: list[InsertType], *, client: edgedb.AsyncIOClient | None = None

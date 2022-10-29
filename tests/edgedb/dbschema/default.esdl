@@ -9,6 +9,8 @@ module default {
         }
     }
 
+    scalar type UserRole extending enum<buyer, seller, admin>;
+
     type User extending DateModel {
         required property name -> str;
         required property phone_number -> str {
@@ -21,6 +23,11 @@ module default {
         }
 
         property names_of_friends := .friends.name;
+
+        property user_role -> UserRole;
+
+        property images -> array<json>;
+        property email -> str;
     }
 
 }
