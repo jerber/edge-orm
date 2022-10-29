@@ -44,13 +44,11 @@ def test_filters_str() -> None:
     rez.filter(last_updated_at_filter, {"la": now()})
     with pytest.raises(ResolverException) as e:
         rez.filter(last_updated_at_filter, {"la": now()})
-    print(f"{rez.build_filters_str()}")
-    assert (
-        rez.build_filters_str()
-        == "FILTER "
-        + resolver_enums.FilterConnector.AND.join(
-            [created_at_filter, last_updated_at_filter]
-        )
+    print(f"{rez.build_filters_str_and_vars(prefix='')}")
+    assert rez.build_filters_str_and_vars(prefix="")[
+        0
+    ] == "FILTER " + resolver_enums.FilterConnector.AND.join(
+        [created_at_filter, last_updated_at_filter]
     )
 
 
@@ -61,7 +59,7 @@ def test_filters_str_with_order_by() -> None:
     order_by = ".created_at ASC"
     rez.order_by(order_by)
     assert (
-        rez.build_filters_str()
+        rez.build_filters_str_and_vars(prefix="")[0]
         == "FILTER " + created_at_filter + " ORDER BY " + order_by
     )
 
@@ -74,7 +72,7 @@ def test_limit_offset_zeros() -> None:
     rez.offset(0)
     with pytest.raises(ResolverException) as e:
         rez.offset(10)
-    assert rez.build_filters_str() == ""
+    assert rez.build_filters_str_and_vars(prefix="")[0] == ""
 
 
 def test_filters_str_with_all() -> None:
@@ -93,7 +91,7 @@ def test_filters_str_with_all() -> None:
         rez.offset(10)
 
     assert (
-        rez.build_filters_str()
+        rez.build_filters_str_and_vars(prefix="")[0]
         == "FILTER "
         + created_at_filter
         + " ORDER BY "
@@ -134,10 +132,10 @@ def test_fields_to_return() -> None:
 
     return_fields_str = "created_at, friends_fb_ids := .friends.auth_id, friends_ids := .friends.ids, friends_names := .friends.name, id, last_updated_at, name, names_of_friends"
 
-    assert rez.build_return_fields_str() == return_fields_str
+    # assert rez.build_return_fields_str() == return_fields_str
     rez.limit(20).filter("exists .friends")
     assert (
-        rez.full_query_str(include_select=True)
+        rez.full_query_str_and_vars(include_select=True, prefix="")[0]
         == f"SELECT User {{ {return_fields_str} }} FILTER exists .friends LIMIT 20"
     )
 
@@ -191,7 +189,31 @@ async def test_query() -> None:
         .order_by(".created_at DESC")
     )
     users = await rez.query()
+    print(f"{rez._node_config.model_name=}")
     debug(users)
+
+
+@pytest.mark.asyncio
+async def test_gets() -> None:
+    phone_number = "+16666666666"
+    user = (
+        await db.UserResolver()
+        .include(names_of_friends=True)
+        .get(phone_number=phone_number)
+    )
+    debug(user)
+    print(f"{user.names_of_friends=}")
+    assert user.phone_number == phone_number
+
+    phone_number = "+16663867023"
+    user = (
+        await db.UserResolver()
+        .include(names_of_friends=True)
+        .get(phone_number=phone_number)
+    )
+    assert user is None
+    with pytest.raises(ResolverException):
+        user = await db.UserResolver().gerror(phone_number=phone_number)
 
 
 async def main() -> None:

@@ -1,7 +1,8 @@
 import typing as T
 import edgedb
 from pydantic import BaseModel, PrivateAttr
-from edge_orm.node import Node, Insert, Patch
+from pydantic.main import ModelMetaclass
+from edge_orm.node import Node, Insert, Patch, EdgeConfigBase
 from edge_orm.logs import logger
 from edge_orm import helpers, execute, span
 from . import enums, errors
@@ -17,9 +18,20 @@ ThisResolverType = T.TypeVar("ThisResolverType", bound="Resolver")  # type: igno
 
 VARS = dict[str, T.Any]
 CONVERSION_FUNC = T.Callable[[str], T.Any]
+FILTER_FIELDS = ["_filter", "_limit", "_offset", "_order_by"]
 
 
-class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
+class Meta(ModelMetaclass):
+    """adds property _node_config to resolver from _node_cls"""
+
+    def __new__(mcs, name, bases, dct, **kwargs):  # type: ignore
+        x = super().__new__(mcs, name, bases, dct, **kwargs)
+        if "_node_cls" in dct:
+            x._node_config: EdgeConfigBase = dct["_node_cls"].EdgeConfig  # type: ignore
+        return x
+
+
+class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=Meta):
     _filter: str = PrivateAttr(None)
     _order_by: str = PrivateAttr(None)
     _limit: int = PrivateAttr(None)
@@ -36,6 +48,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
     _nested_resolvers: NestedResolvers = PrivateAttr(default_factory=NestedResolvers)
 
     _node_cls: T.ClassVar[T.Type[NodeType]]  # type: ignore
+    _node_config: T.ClassVar[EdgeConfigBase]
 
     is_count: bool = False
 
@@ -44,21 +57,13 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
         if not self._fields_to_return:
             self._fields_to_return = (
                 self.node_field_names()
-                - self.node_appendix_properties()
-                - self.node_computed_properties()
+                - self._node_config.appendix_properties
+                - self._node_config.computed_properties
             )
 
     @classmethod
     def node_field_names(cls: T.Type[ThisResolverType]) -> set[str]:
         return {field.alias for field in cls._node_cls.__fields__.values()}
-
-    @classmethod
-    def node_appendix_properties(cls) -> set[str]:
-        return cls._node_cls.EdgeConfig.appendix_properties
-
-    @classmethod
-    def node_computed_properties(cls) -> set[str]:
-        return cls._node_cls.EdgeConfig.computed_properties
 
     """RESOLVER BUILDING METHODS"""
 
@@ -118,14 +123,11 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         if not kwargs:
             raise errors.ResolverException("Nothing to filter by.")
-        conversion_map = self._node_cls.EdgeConfig.node_edgedb_conversion_map
+        conversion_map = self._node_config.node_edgedb_conversion_map
         filter_strs = []
         variables = {}
         for field_name, field_value in kwargs.items():
             cast = conversion_map[field_name]["cast"]
-            # variable_name = (
-            #     f"{field_name}{helpers.random_str(10, include_re_code=True)}"
-            # )
             variable_name = field_name
             filter_strs.append(f".{field_name} = <{cast}>${variable_name}")
             variables[variable_name] = field_value
@@ -142,14 +144,11 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         if not kwargs:
             raise errors.ResolverException("Nothing to filter by.")
-        conversion_map = self._node_cls.EdgeConfig.node_edgedb_conversion_map
+        conversion_map = self._node_config.node_edgedb_conversion_map
         filter_strs = []
         variables = {}
         for field_name, value_lst in kwargs.items():
             cast = conversion_map[field_name]["cast"]
-            # variable_name = (
-            #     f"{field_name}s{helpers.random_str(10, include_re_code=True)}"
-            # )
             variable_name = field_name
             if cast.startswith("default::"):  # if an enum or other scalar
                 s = f".{field_name} in <{cast}>array_unpack(<array<str>>${variable_name})"
@@ -215,11 +214,11 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
         return self
 
     def include_appendix_properties(self: ThisResolverType) -> ThisResolverType:
-        self._fields_to_return.update(self.node_appendix_properties())
+        self._fields_to_return.update(self._node_config.appendix_properties)
         return self
 
     def include_computed_properties(self: ThisResolverType) -> ThisResolverType:
-        self._fields_to_return.update(self.node_computed_properties())
+        self._fields_to_return.update(self._node_config.computed_properties)
         return self
 
     def extra_field(
@@ -279,9 +278,10 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
         self,
         include_select: bool,
         prefix: str,
+        include_filters: bool = True,
         check_for_intersecting_variables: bool = False,
     ) -> tuple[str, VARS]:
-        select = f"SELECT {self._node_cls.__name__} " if include_select else ""
+        select = f"SELECT {self._node_config.model_name} " if include_select else ""
         (
             nested_query_str,
             nested_vars,
@@ -289,11 +289,14 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
 
         brackets_strs = [*self._fields_to_return, *self._extra_fields, nested_query_str]
         brackets_str = ", ".join(sorted([s for s in brackets_strs if s]))
-
         s = f"{select}{{ {brackets_str} }}"
-        filters_str, query_vars = self.build_filters_str_and_vars(prefix=prefix)
-        if filters_str:
-            s += f" {filters_str}"
+
+        if include_filters:
+            filters_str, query_vars = self.build_filters_str_and_vars(prefix=prefix)
+            if filters_str:
+                s += f" {filters_str}"
+        else:
+            query_vars = {}
 
         if check_for_intersecting_variables:
             # this is unlikely to happen because of the separator and prefix but just for sanity you can do this
@@ -375,26 +378,25 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
             include_select=True, prefix=""
         )
         with span.span(
-            op=f"edgedb.query.{self._node_cls.EdgeConfig.model_name}",
+            op=f"edgedb.query.{self._node_config.model_name}",
             description=query_str[:200],
         ):
             raw_response = await execute.query(
-                client=client or self._node_cls.EdgeConfig.client,
+                client=client or self._node_config.client,
                 query_str=query_str,
                 variables=variables,
                 only_one=False,
             )
-            if not isinstance(raw_response, list):
-                raise errors.ResolverException(
-                    f"Expected a list from query, got {raw_response}"
-                )
-
+        if not isinstance(raw_response, list):
+            raise errors.ResolverException(
+                f"Expected a list from query, got {raw_response}."
+            )
+        if not raw_response:
+            return []
         with span.span(
-            op=f"parse.{self._node_cls.EdgeConfig.model_name}",
+            op=f"parse.{self._node_config.model_name}",
             description=str(len(raw_response)),
         ):
-            if not raw_response:
-                return []
             return [self._node_cls(**d) for d in raw_response]
 
     async def query_first(
@@ -413,14 +415,52 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
     async def _get(
         self, *, client: edgedb.AsyncIOClient | None = None, **kwargs: T.Any
     ) -> NodeType | None:
-        # TODO
-        ...
+        # TODO merge
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        if len(kwargs) != 1:
+            raise errors.ResolverException(
+                f"Must only give one argument, received {kwargs}."
+            )
+
+        if existing_filter_str := self.has_filters():
+            raise errors.ResolverException(
+                f"This resolver already has filters: {existing_filter_str}. "
+                f"If you wish to GET an object, use a resolver that does not have filters."
+            )
+
+        key, value = list(kwargs.items())[0]
+        if key not in self._node_config.exclusive_fields:
+            raise errors.ResolverException(f"Field '{key}' is not exclusive.")
+
+        self._filter_by(**kwargs)
+        query_str, variables = self.full_query_str_and_vars(
+            include_select=True, prefix=""
+        )
+        with span.span(
+            op=f"edgedb.get.{self._node_config.model_name}",
+            description=query_str[:200],
+        ):
+            raw_response = await execute.query(
+                client=client or self._node_config.client,
+                query_str=query_str,
+                variables=variables,
+                only_one=True,
+            )
+
+        if not raw_response:
+            return None
+        with span.span(op=f"parse.{self._node_config.model_name}"):
+            return self._node_cls(**raw_response)
 
     async def _gerror(
         self, *, client: edgedb.AsyncIOClient | None = None, **kwargs: T.Any
     ) -> NodeType:
-        # TODO
-        ...
+        model = await self._get(client=client, **kwargs)
+        if not model:
+            raise errors.ResolverException(
+                f"No {self._node_config.model_name} in db with fields {kwargs}."
+            )
+        return model
 
     """MUTATION METHODS"""
 
@@ -447,3 +487,11 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType]):
     ) -> list[NodeType]:
         # TODO
         ...
+
+    """HELPERS"""
+
+    def has_filters(self) -> T.Optional[str]:
+        for field in FILTER_FIELDS:
+            if (val := getattr(self, field)) is not None:
+                return val
+        return None
