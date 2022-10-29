@@ -13,8 +13,7 @@ from .introspection import (
     Link,
     Property,
 )
-from .enums import PropertyCardinality
-from edge_orm.node.models import CONVERSION_MAP
+from edge_orm.node.models import CONVERSION_MAP, PropertyCardinality, FieldInfo
 
 ENV_VAR_PATTERN = r"[A-Z_]+"
 
@@ -86,6 +85,7 @@ def imports(enums_module: str) -> str:
         "from decimal import Decimal",
         "from edgedb import RelativeDuration, AsyncIOClient, create_async_client",
         "from pydantic import BaseModel, Field, PrivateAttr, validator",
+        f"from {PATH_TO_MODULE}.node.models import Cardinality, FieldInfo",
         f"from {PATH_TO_MODULE} import Node, Insert, Patch, EdgeConfigBase, Resolver, NodeException, ResolverException, UNSET, UnsetType, validators, errors, resolver_enums",
         "FilterConnector = resolver_enums.FilterConnector",
         f"from .{enums_module} import *",
@@ -266,11 +266,11 @@ EdgeConfig: T.ClassVar[EdgeConfigBase] = EdgeConfigBase(
     basemodel_properties = {stringify_set(set(basemodel_properties))},
     custom_annotations = {stringify_set(set(custom_annotations))},
     
-    node_edgedb_conversion_map = {stringify_dict(node_edgedb_conversion_map)},
-    insert_edgedb_conversion_map = {stringify_dict(insert_edgedb_conversion_map)},
-    patch_edgedb_conversion_map = {stringify_dict(patch_edgedb_conversion_map)},
+    node_edgedb_conversion_map = {stringify_basemodel_dict(node_edgedb_conversion_map)},
+    insert_edgedb_conversion_map = {stringify_basemodel_dict(insert_edgedb_conversion_map)},
+    patch_edgedb_conversion_map = {stringify_basemodel_dict(patch_edgedb_conversion_map)},
     
-    insert_link_conversion_map = {stringify_dict(insert_link_conversion_map)}
+    insert_link_conversion_map = {stringify_basemodel_dict(insert_link_conversion_map)}
 )
     """
 
@@ -297,6 +297,30 @@ def stringify_set(s: T.Set[str]) -> str:
     s_sorted = sorted(list(s))
     strs: T.List[str] = [f'"{i}"' for i in s_sorted]
     return "{" + ",".join(strs) + "}"
+
+
+def stringify_basemodel(model: BaseModel) -> str:
+    "FieldInfo{cast: <str>} -> FieldInfo(cast='<str>')"
+    str_lst: list[str] = []
+    for k, v in model.dict().items():
+        val_str = v
+        if isinstance(v, Enum):
+            val_str = f"{v.__class__.__name__}.{v.value}"
+        elif isinstance(v, str):
+            val_str = f'"{v}"'
+        elif isinstance(v, BaseModel):
+            val_str = stringify_basemodel(v)
+        str_lst.append(f"{k}={val_str}")
+    inner = ", ".join(str_lst)
+    return f"{model.__class__.__name__}({inner})"
+
+
+BaseModelType = T.TypeVar("BaseModelType", bound=BaseModel)
+
+
+def stringify_basemodel_dict(d: dict[str, BaseModelType]) -> str:
+    inner = [f'"{k}":{stringify_basemodel(v)}' for k, v in d.items()]
+    return f"{{{','.join(inner)}}}"
 
 
 def edgedb_conversion_type_from_prop(prop: Property) -> str:
@@ -398,11 +422,12 @@ def build_node_and_resolver(
 
     for prop in object_type.properties:
         conversion_type = edgedb_conversion_type_from_prop(prop)
-        node_edgedb_conversion_map[prop.name] = {
-            "cast": conversion_type,
-            "cardinality": prop.cardinality.value,
-            "readonly": prop.readonly,
-        }
+        node_edgedb_conversion_map[prop.name] = FieldInfo(
+            cast=conversion_type,
+            cardinality=prop.cardinality,
+            readonly=prop.readonly,
+            required=prop.required,
+        )
         if prop.is_computed:
             computed_properties.add(prop.name)
         is_appendix = False
@@ -471,11 +496,12 @@ def {prop.name}(self) -> {type_str}:
         if prop.name != "id" or allow_inserting_id:
             # for insert type
             if not prop.is_computed and not prop.not_insertable:
-                insert_edgedb_conversion_map[prop.name] = {
-                    "cast": conversion_type,
-                    "cardinality": prop.cardinality.value,
-                    "readonly": prop.readonly,
-                }
+                insert_edgedb_conversion_map[prop.name] = FieldInfo(
+                    cast=conversion_type,
+                    cardinality=prop.cardinality,
+                    readonly=prop.readonly,
+                    required=prop.required,
+                )
                 insert_type_str = type_str
                 # if required but has default, add optional back
                 if prop.required and prop.default:
@@ -494,11 +520,12 @@ def {prop.name}(self) -> {type_str}:
                 )
             # for update type
             if not prop.is_computed and not prop.readonly:
-                patch_edgedb_conversion_map[prop.name] = {
-                    "cast": conversion_type,
-                    "cardinality": prop.cardinality.value,
-                    "readonly": prop.readonly,
-                }
+                patch_edgedb_conversion_map[prop.name] = FieldInfo(
+                    cast=conversion_type,
+                    cardinality=prop.cardinality,
+                    readonly=prop.readonly,
+                    required=prop.required,
+                )
                 patch_type_str = type_str
                 if prop.required and prop.default:
                     patch_type_str = f"T.Optional[{patch_type_str}]"
@@ -517,12 +544,12 @@ def {prop.name}(self) -> {type_str}:
     for link in object_type.links:
         if link.name == "__type__":
             continue
-        link_conversion_map[link.name] = {
-            "cast": link.target.model_name,
-            "cardinality": link.cardinality.value,
-            "readonly": link.readonly,
-            "required": link.required,
-        }
+        link_conversion_map[link.name] = FieldInfo(
+            cast=link.target.model_name,
+            cardinality=link.cardinality,
+            readonly=link.readonly,
+            required=link.required,
+        )
         edge_resolver_map[link.name] = f"{link.target.model_name}Resolver"
         if not link.readonly and not link.is_computed:
             updatable_links.add(link.name)

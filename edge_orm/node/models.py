@@ -1,9 +1,28 @@
 import typing as T
 from uuid import UUID
-from pydantic import BaseModel, PrivateAttr, Field
+from enum import Enum
+from pydantic import BaseModel, PrivateAttr
 from edgedb import AsyncIOClient
 
-CONVERSION_MAP = dict[str, dict[str, str | bool]]
+
+class PropertyCardinality(str, Enum):
+    ONE = "ONE"
+    MANY = "MANY"
+
+
+class Cardinality(str, Enum):
+    One = "One"
+    Many = "Many"
+
+
+class FieldInfo(BaseModel):
+    cast: str
+    cardinality: Cardinality
+    readonly: bool
+    required: bool
+
+
+CONVERSION_MAP = dict[str, FieldInfo]
 
 
 class EdgeConfigBase(BaseModel):

@@ -4,7 +4,7 @@ from enum import Enum
 import edgedb
 from pydantic import BaseModel, Field, parse_obj_as
 from edge_orm import execute
-from .enums import PropertyCardinality
+from edge_orm.node.models import PropertyCardinality, Cardinality
 
 
 class IntrospectionException(Exception):
@@ -32,11 +32,6 @@ edgedb_to_python_type_mapping = {
     "relative_duration": "RelativeDuration",
     "sequence": "int",
 }
-
-
-class Cardinality(str, Enum):
-    One = "One"
-    Many = "Many"
 
 
 class ElementType(BaseModel):

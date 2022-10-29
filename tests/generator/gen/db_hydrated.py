@@ -7,6 +7,7 @@ from uuid import UUID
 from decimal import Decimal
 from edgedb import RelativeDuration, AsyncIOClient, create_async_client
 from pydantic import BaseModel, Field, PrivateAttr, validator
+from edge_orm.node.models import Cardinality, FieldInfo
 from edge_orm import (
     Node,
     Insert,
@@ -72,71 +73,120 @@ class User(Node):
         basemodel_properties=set(),
         custom_annotations=set(),
         node_edgedb_conversion_map={
-            "id": {"cast": "std::uuid", "cardinality": "One", "readonly": True},
-            "phone_number": {
-                "cast": "std::str",
-                "cardinality": "One",
-                "readonly": True,
-            },
-            "last_updated_at": {
-                "cast": "std::datetime",
-                "cardinality": "One",
-                "readonly": False,
-            },
-            "created_at": {
-                "cast": "std::datetime",
-                "cardinality": "One",
-                "readonly": False,
-            },
-            "name": {"cast": "std::str", "cardinality": "One", "readonly": False},
-            "age": {"cast": "std::int16", "cardinality": "One", "readonly": False},
-            "names_of_friends": {
-                "cast": "std::str",
-                "cardinality": "Many",
-                "readonly": False,
-            },
+            "id": FieldInfo(
+                cast="std::uuid",
+                cardinality=Cardinality.One,
+                readonly=True,
+                required=True,
+            ),
+            "phone_number": FieldInfo(
+                cast="std::str",
+                cardinality=Cardinality.One,
+                readonly=True,
+                required=True,
+            ),
+            "last_updated_at": FieldInfo(
+                cast="std::datetime",
+                cardinality=Cardinality.One,
+                readonly=False,
+                required=True,
+            ),
+            "created_at": FieldInfo(
+                cast="std::datetime",
+                cardinality=Cardinality.One,
+                readonly=False,
+                required=True,
+            ),
+            "name": FieldInfo(
+                cast="std::str",
+                cardinality=Cardinality.One,
+                readonly=False,
+                required=True,
+            ),
+            "age": FieldInfo(
+                cast="std::int16",
+                cardinality=Cardinality.One,
+                readonly=False,
+                required=False,
+            ),
+            "names_of_friends": FieldInfo(
+                cast="std::str",
+                cardinality=Cardinality.Many,
+                readonly=False,
+                required=False,
+            ),
         },
         insert_edgedb_conversion_map={
-            "id": {"cast": "std::uuid", "cardinality": "One", "readonly": True},
-            "phone_number": {
-                "cast": "std::str",
-                "cardinality": "One",
-                "readonly": True,
-            },
-            "last_updated_at": {
-                "cast": "std::datetime",
-                "cardinality": "One",
-                "readonly": False,
-            },
-            "created_at": {
-                "cast": "std::datetime",
-                "cardinality": "One",
-                "readonly": False,
-            },
-            "name": {"cast": "std::str", "cardinality": "One", "readonly": False},
-            "age": {"cast": "std::int16", "cardinality": "One", "readonly": False},
+            "id": FieldInfo(
+                cast="std::uuid",
+                cardinality=Cardinality.One,
+                readonly=True,
+                required=True,
+            ),
+            "phone_number": FieldInfo(
+                cast="std::str",
+                cardinality=Cardinality.One,
+                readonly=True,
+                required=True,
+            ),
+            "last_updated_at": FieldInfo(
+                cast="std::datetime",
+                cardinality=Cardinality.One,
+                readonly=False,
+                required=True,
+            ),
+            "created_at": FieldInfo(
+                cast="std::datetime",
+                cardinality=Cardinality.One,
+                readonly=False,
+                required=True,
+            ),
+            "name": FieldInfo(
+                cast="std::str",
+                cardinality=Cardinality.One,
+                readonly=False,
+                required=True,
+            ),
+            "age": FieldInfo(
+                cast="std::int16",
+                cardinality=Cardinality.One,
+                readonly=False,
+                required=False,
+            ),
         },
         patch_edgedb_conversion_map={
-            "last_updated_at": {
-                "cast": "std::datetime",
-                "cardinality": "One",
-                "readonly": False,
-            },
-            "created_at": {
-                "cast": "std::datetime",
-                "cardinality": "One",
-                "readonly": False,
-            },
-            "name": {"cast": "std::str", "cardinality": "One", "readonly": False},
-            "age": {"cast": "std::int16", "cardinality": "One", "readonly": False},
+            "last_updated_at": FieldInfo(
+                cast="std::datetime",
+                cardinality=Cardinality.One,
+                readonly=False,
+                required=True,
+            ),
+            "created_at": FieldInfo(
+                cast="std::datetime",
+                cardinality=Cardinality.One,
+                readonly=False,
+                required=True,
+            ),
+            "name": FieldInfo(
+                cast="std::str",
+                cardinality=Cardinality.One,
+                readonly=False,
+                required=True,
+            ),
+            "age": FieldInfo(
+                cast="std::int16",
+                cardinality=Cardinality.One,
+                readonly=False,
+                required=False,
+            ),
         },
         insert_link_conversion_map={
-            "friends": {
-                "cast": "User",
-                "cardinality": "Many",
-                "readonly": False,
-                "required": False,
-            }
+            "friends": FieldInfo(
+                cast="User",
+                cardinality=Cardinality.Many,
+                readonly=False,
+                required=False,
+            )
         },
     )
 
@@ -282,42 +332,58 @@ class DateModel(Node):
         basemodel_properties=set(),
         custom_annotations=set(),
         node_edgedb_conversion_map={
-            "id": {"cast": "std::uuid", "cardinality": "One", "readonly": True},
-            "created_at": {
-                "cast": "std::datetime",
-                "cardinality": "One",
-                "readonly": False,
-            },
-            "last_updated_at": {
-                "cast": "std::datetime",
-                "cardinality": "One",
-                "readonly": False,
-            },
+            "id": FieldInfo(
+                cast="std::uuid",
+                cardinality=Cardinality.One,
+                readonly=True,
+                required=True,
+            ),
+            "created_at": FieldInfo(
+                cast="std::datetime",
+                cardinality=Cardinality.One,
+                readonly=False,
+                required=True,
+            ),
+            "last_updated_at": FieldInfo(
+                cast="std::datetime",
+                cardinality=Cardinality.One,
+                readonly=False,
+                required=True,
+            ),
         },
         insert_edgedb_conversion_map={
-            "id": {"cast": "std::uuid", "cardinality": "One", "readonly": True},
-            "created_at": {
-                "cast": "std::datetime",
-                "cardinality": "One",
-                "readonly": False,
-            },
-            "last_updated_at": {
-                "cast": "std::datetime",
-                "cardinality": "One",
-                "readonly": False,
-            },
+            "id": FieldInfo(
+                cast="std::uuid",
+                cardinality=Cardinality.One,
+                readonly=True,
+                required=True,
+            ),
+            "created_at": FieldInfo(
+                cast="std::datetime",
+                cardinality=Cardinality.One,
+                readonly=False,
+                required=True,
+            ),
+            "last_updated_at": FieldInfo(
+                cast="std::datetime",
+                cardinality=Cardinality.One,
+                readonly=False,
+                required=True,
+            ),
         },
         patch_edgedb_conversion_map={
-            "created_at": {
-                "cast": "std::datetime",
-                "cardinality": "One",
-                "readonly": False,
-            },
-            "last_updated_at": {
-                "cast": "std::datetime",
-                "cardinality": "One",
-                "readonly": False,
-            },
+            "created_at": FieldInfo(
+                cast="std::datetime",
+                cardinality=Cardinality.One,
+                readonly=False,
+                required=True,
+            ),
+            "last_updated_at": FieldInfo(
+                cast="std::datetime",
+                cardinality=Cardinality.One,
+                readonly=False,
+                required=True,
+            ),
         },
         insert_link_conversion_map={},
     )

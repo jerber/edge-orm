@@ -127,7 +127,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         filter_strs = []
         variables = {}
         for field_name, field_value in kwargs.items():
-            cast = conversion_map[field_name]["cast"]
+            cast = conversion_map[field_name].cast
             variable_name = field_name
             filter_strs.append(f".{field_name} = <{cast}>${variable_name}")
             variables[variable_name] = field_value
@@ -148,7 +148,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         filter_strs = []
         variables = {}
         for field_name, value_lst in kwargs.items():
-            cast = conversion_map[field_name]["cast"]
+            cast = conversion_map[field_name].cast
             variable_name = field_name
             if cast.startswith("default::"):  # if an enum or other scalar
                 s = f".{field_name} in <{cast}>array_unpack(<array<str>>${variable_name})"
@@ -467,7 +467,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
     async def insert_one(
         self, insert: InsertType, *, client: edgedb.AsyncIOClient | None = None
     ) -> NodeType:
-        # TODO
+        # TODO merge
         ...
 
     async def insert_many(
