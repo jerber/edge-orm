@@ -19,6 +19,9 @@ ThisResolverType = T.TypeVar("ThisResolverType", bound="Resolver")  # type: igno
 VARS = dict[str, T.Any]
 CONVERSION_FUNC = T.Callable[[str], T.Any]
 FILTER_FIELDS = ["_filter", "_limit", "_offset", "_order_by"]
+RAW_RESP_ONE = dict[str, T.Any]
+RAW_RESP_MANY = list[RAW_RESP_ONE]
+RAW_RESPONSE = RAW_RESP_ONE | RAW_RESP_MANY
 
 
 class Meta(ModelMetaclass):
@@ -399,11 +402,8 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
             raise errors.ResolverException(
                 f"Expected a list from query, got {raw_response}."
             )
-        if not raw_response:
-            return []
         with span.span(
-            op=f"parse.{self.model_name}",
-            description=str(len(raw_response)),
+            op=f"parse.{self.model_name}", description=str(len(raw_response))
         ):
             return [self._node_cls(**d) for d in raw_response]
 
@@ -506,6 +506,31 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         # TODO
         ...
 
+    async def _update(
+        self, patch: PatchType, only_one: bool, client: edgedb.AsyncIOClient | None
+    ) -> RAW_RESPONSE:
+        update_s, update_variables = utils.model_to_set_str_vars(
+            model=patch, conversion_map=self._node_config.patch_edgedb_conversion_map
+        )
+        filters_s, filters_vars = self.build_filters_str_and_vars(prefix="")
+        update_s = f"UPDATE {self.model_name} {filters_s} SET {update_s}"
+        select_s, select_variables = self.full_query_str_and_vars(
+            prefix="",
+            model_name_override="model",
+            include_select=True,
+            include_filters=False,
+        )
+        final_update_s = f"WITH model := ({update_s}) {select_s}"
+        with span.span(op=f"edgedb.update.{self.model_name}"):
+            raw_response = await execute.query(
+                client=client or self._node_config.client,
+                query_str=final_update_s,
+                variables={**select_variables, **filters_vars, **update_variables},
+                only_one=only_one,
+            )
+        raw_response = T.cast(RAW_RESPONSE, raw_response)
+        return raw_response
+
     async def _update_one(
         self,
         patch: PatchType,
@@ -524,26 +549,8 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         if field_name not in self._node_config.exclusive_fields:
             raise errors.ResolverException(f"Field '{field_name}' is not exclusive.")
         self._filter_by(**{field_name: value})
-
-        update_s, update_variables = utils.model_to_set_str_vars(
-            model=patch, conversion_map=self._node_config.patch_edgedb_conversion_map
-        )
-        filters_s, filters_vars = self.build_filters_str_and_vars(prefix="")
-        update_s = f"UPDATE {self.model_name} {filters_s} SET {update_s}"
-        select_s, select_variables = self.full_query_str_and_vars(
-            prefix="",
-            model_name_override="model",
-            include_select=True,
-            include_filters=False,
-        )
-        final_update_s = f"WITH model := ({update_s}) {select_s}"
-        with span.span(op=f"edgedb.update.{self.model_name}"):
-            raw_response = await execute.query(
-                client=client or self._node_config.client,
-                query_str=final_update_s,
-                variables={**select_variables, **filters_vars, **update_variables},
-                only_one=True,
-            )
+        raw_response = await self._update(patch=patch, only_one=True, client=client)
+        raw_response = T.cast(RAW_RESP_ONE, raw_response)
         if not raw_response:
             raise errors.ResolverException("No object to update.")
         with span.span(op=f"parse.{self.model_name}"):
@@ -557,17 +564,17 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         client: edgedb.AsyncIOClient | None = None,
     ) -> list[NodeType]:
         if not update_all:
-            if self.has_filters():
+            if not self.has_filters():
                 raise errors.ResolverException(
                     "You did not give filters which means this will update *all* models. "
                     "If this is your intention, pass update_all=True."
                 )
-
-        update_s, update_variables = utils.model_to_set_str_vars(
-            model=patch, conversion_map=self._node_config.patch_edgedb_conversion_map
-        )
-        # ensure filters exist if not update all
-        print(f"{update_s=}, {update_variables=}")
+        raw_response = await self._update(patch=patch, only_one=False, client=client)
+        raw_response = T.cast(RAW_RESP_MANY, raw_response)
+        with span.span(
+            op=f"parse.{self.model_name}", description=f"{len(raw_response)}"
+        ):
+            return [self._node_cls(**d) for d in raw_response]
 
     """HELPERS"""
 
