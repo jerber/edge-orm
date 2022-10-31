@@ -201,14 +201,19 @@ async def get(self, *, client: AsyncIOClient | None = None, {params_fields_str})
     gerror_str = f"""
 async def gerror(self, *, client: AsyncIOClient | None = None, {params_fields_str}) -> {node_name}:
 {indent_lines(validation_str)}
-    return await self._get(field_name=field_name, value=value, client=client)
+    return await self._gerror(field_name=field_name, value=value, client=client)
     """
     update_one_str = f"""
 async def update_one(self, patch: {node_name}Patch, *, client: AsyncIOClient | None = None, {params_fields_str}) -> {node_name}:
 {indent_lines(validation_str)}
     return await self._update_one(patch=patch, field_name=field_name, value=value, client=client)
     """
-    return f"{get_str}\n{gerror_str}\n{update_one_str}\n"
+    delete_one_str = f"""
+async def delete_one(self, *, client: AsyncIOClient | None = None, {params_fields_str}) -> {node_name}:
+{indent_lines(validation_str)}
+    return await self._delete_one(field_name=field_name, value=value, client=client)
+    """
+    return f"{get_str}\n{gerror_str}\n{update_one_str}\n{delete_one_str}\n"
 
 
 def build_include_fields_function(

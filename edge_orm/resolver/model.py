@@ -402,10 +402,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
             raise errors.ResolverException(
                 f"Expected a list from query, got {raw_response}."
             )
-        with span.span(
-            op=f"parse.{self.model_name}", description=str(len(raw_response))
-        ):
-            return [self._node_cls(**d) for d in raw_response]
+        return self.parse_obj_with_cache_list(raw_response)
 
     async def query_first(
         self, client: edgedb.AsyncIOClient | None = None
@@ -428,15 +425,9 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         client: edgedb.AsyncIOClient | None = None,
     ) -> NodeType | None:
         # TODO merge
-        if value is None:
-            raise errors.ResolverException("Value must not be None.")
-        if field_name not in self._node_config.exclusive_fields:
-            raise errors.ResolverException(f"Field '{field_name}' is not exclusive.")
-        if existing_filter_str := self.has_filters():
-            raise errors.ResolverException(
-                f"This resolver already has filters: {existing_filter_str}. "
-                f"If you wish to GET an object, use a resolver that does not have root filters."
-            )
+        self.validate_field_name_value_filters(
+            operation_name="get", field_name=field_name, value=value
+        )
         self._filter_by(**{field_name: value})
         query_str, variables = self.full_query_str_and_vars(
             include_select=True, prefix=""
@@ -451,8 +442,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
 
         if not raw_response:
             return None
-        with span.span(op=f"parse.{self.model_name}"):
-            return self._node_cls(**raw_response)
+        return self.parse_obj_with_cache(raw_response)
 
     async def _gerror(
         self,
@@ -473,7 +463,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
     async def insert_one(
         self, insert: InsertType, *, client: edgedb.AsyncIOClient | None = None
     ) -> NodeType:
-        # TODO links + merge resolver
+        # TODO merge resolver
         if existing_filter_str := self.has_filters():
             raise errors.ResolverException(
                 f"This resolver already has filters: {existing_filter_str}. "
@@ -497,8 +487,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
             )
         if not raw_response:
             raise errors.ResolverException("No response from insert.")
-        with span.span(op=f"parse.{self.model_name}"):
-            return self._node_cls(**raw_response)
+        return self.parse_obj_with_cache(raw_response)
 
     async def insert_many(
         self, inserts: list[InsertType], *, client: edgedb.AsyncIOClient | None = None
@@ -531,6 +520,20 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         raw_response = T.cast(RAW_RESPONSE, raw_response)
         return raw_response
 
+    def validate_field_name_value_filters(
+        self, operation_name: str, field_name: str, value: T.Any
+    ) -> None:
+        if existing_filter_str := self.has_filters():
+            raise errors.ResolverException(
+                f"`{operation_name}` requires a resolver with *no* root filters but this resolver has root filters: "
+                f"{existing_filter_str}. Instead, pass in the exclusive field + value "
+                f"or use a resolver without root filters."
+            )
+        if value is None:
+            raise errors.ResolverException("Value must not be None.")
+        if field_name not in self._node_config.exclusive_fields:
+            raise errors.ResolverException(f"Field '{field_name}' is not exclusive.")
+
     async def _update_one(
         self,
         patch: PatchType,
@@ -539,22 +542,15 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         value: T.Any,
         client: edgedb.AsyncIOClient | None = None,
     ) -> NodeType:
-        if existing_filter_str := self.has_filters():
-            raise errors.ResolverException(
-                f"update_one requires a resolver with *no* root filters but this resolver has filters: "
-                f"{existing_filter_str}. Instead, pass in the exclusive field + value."
-            )
-        if value is None:
-            raise errors.ResolverException("Value must not be None.")
-        if field_name not in self._node_config.exclusive_fields:
-            raise errors.ResolverException(f"Field '{field_name}' is not exclusive.")
+        self.validate_field_name_value_filters(
+            operation_name="update_one", field_name=field_name, value=value
+        )
         self._filter_by(**{field_name: value})
         raw_response = await self._update(patch=patch, only_one=True, client=client)
         raw_response = T.cast(RAW_RESP_ONE, raw_response)
         if not raw_response:
             raise errors.ResolverException("No object to update.")
-        with span.span(op=f"parse.{self.model_name}"):
-            return self._node_cls(**raw_response)
+        return self.parse_obj_with_cache(raw_response)
 
     async def update_many(
         self,
@@ -571,10 +567,72 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
                 )
         raw_response = await self._update(patch=patch, only_one=False, client=client)
         raw_response = T.cast(RAW_RESP_MANY, raw_response)
-        with span.span(
-            op=f"parse.{self.model_name}", description=f"{len(raw_response)}"
-        ):
-            return [self._node_cls(**d) for d in raw_response]
+        return self.parse_obj_with_cache_list(raw_response)
+
+    async def _delete(
+        self, only_one: bool, client: edgedb.AsyncIOClient | None
+    ) -> RAW_RESPONSE:
+        filters_s, filters_vars = self.build_filters_str_and_vars(prefix="")
+        delete_s = f"DELETE {self.model_name} {filters_s}"
+        select_s, select_variables = self.full_query_str_and_vars(
+            prefix="",
+            model_name_override="model",
+            include_select=True,
+            include_filters=False,
+        )
+        final_delete_s = f"WITH model := ({delete_s}) {select_s}"
+        with span.span(op=f"edgedb.delete.{self.model_name}"):
+            raw_response = await execute.query(
+                client=client or self._node_config.client,
+                query_str=final_delete_s,
+                variables={**select_variables, **filters_vars},
+                only_one=only_one,
+            )
+        raw_response = T.cast(RAW_RESPONSE, raw_response)
+        return raw_response
+
+    async def _delete_one(
+        self,
+        *,
+        field_name: str,
+        value: T.Any,
+        client: edgedb.AsyncIOClient | None = None,
+    ) -> NodeType:
+        self.validate_field_name_value_filters(
+            operation_name="delete one", field_name=field_name, value=value
+        )
+        self._filter_by(**{field_name: value})
+        raw_response = await self._delete(only_one=True, client=client)
+        raw_response = T.cast(RAW_RESP_ONE, raw_response)
+        if not raw_response:
+            raise errors.ResolverException("No object to delete.")
+        return self.parse_obj_with_cache(raw_response)
+
+    async def delete_many(
+        self,
+        *,
+        delete_all: bool = False,
+        client: edgedb.AsyncIOClient | None = None,
+    ) -> list[NodeType]:
+        if not delete_all:
+            if not self.has_filters():
+                raise errors.ResolverException(
+                    "You did not give filters which means this will delete *all* models. "
+                    "If this is your intention, pass delete_all=True."
+                )
+        raw_response = await self._delete(only_one=False, client=client)
+        raw_response = T.cast(RAW_RESP_MANY, raw_response)
+        return self.parse_obj_with_cache_list(raw_response)
+
+    """PARSING"""
+
+    def parse_obj_with_cache(self, d: RAW_RESP_ONE) -> NodeType:
+        with span.span(op=f"parse.{self.model_name}"):
+            return self._node_cls(**d)
+
+    def parse_obj_with_cache_list(self, lst: RAW_RESP_MANY) -> list[NodeType]:
+        with span.span(op=f"parse_list.{self.model_name}", description=f"{len(lst)}"):
+            return [self.parse_obj_with_cache(d) for d in lst]
 
     """HELPERS"""
 

@@ -358,7 +358,7 @@ class UserResolver(Resolver[User, UserInsert, UserPatch]):
         if len(kwargs) != 1:
             raise ResolverException(f"Must only give one argument, received {kwargs}.")
         field_name, value = list(kwargs.items())[0]
-        return await self._get(field_name=field_name, value=value, client=client)
+        return await self._gerror(field_name=field_name, value=value, client=client)
 
     async def update_one(
         self,
@@ -376,6 +376,20 @@ class UserResolver(Resolver[User, UserInsert, UserPatch]):
         return await self._update_one(
             patch=patch, field_name=field_name, value=value, client=client
         )
+
+    async def delete_one(
+        self,
+        *,
+        client: AsyncIOClient | None = None,
+        id: T.Optional[T.Any] = None,
+        phone_number: T.Optional[T.Any] = None,
+    ) -> User:
+        kwargs = {"id": id, "phone_number": phone_number}
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        if len(kwargs) != 1:
+            raise ResolverException(f"Must only give one argument, received {kwargs}.")
+        field_name, value = list(kwargs.items())[0]
+        return await self._delete_one(field_name=field_name, value=value, client=client)
 
     def filter_by(
         self,
@@ -567,7 +581,7 @@ class DateModelResolver(Resolver[DateModel, DateModelInsert, DateModelPatch]):
         if len(kwargs) != 1:
             raise ResolverException(f"Must only give one argument, received {kwargs}.")
         field_name, value = list(kwargs.items())[0]
-        return await self._get(field_name=field_name, value=value, client=client)
+        return await self._gerror(field_name=field_name, value=value, client=client)
 
     async def update_one(
         self,
@@ -584,6 +598,16 @@ class DateModelResolver(Resolver[DateModel, DateModelInsert, DateModelPatch]):
         return await self._update_one(
             patch=patch, field_name=field_name, value=value, client=client
         )
+
+    async def delete_one(
+        self, *, client: AsyncIOClient | None = None, id: T.Optional[T.Any] = None
+    ) -> DateModel:
+        kwargs = {"id": id}
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        if len(kwargs) != 1:
+            raise ResolverException(f"Must only give one argument, received {kwargs}.")
+        field_name, value = list(kwargs.items())[0]
+        return await self._delete_one(field_name=field_name, value=value, client=client)
 
     def filter_by(
         self,
