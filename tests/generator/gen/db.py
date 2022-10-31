@@ -7,7 +7,7 @@ from uuid import UUID
 from decimal import Decimal
 from edgedb import RelativeDuration, AsyncIOClient, create_async_client
 from pydantic import BaseModel, Field, PrivateAttr, validator
-from edge_orm.node.models import Cardinality, FieldInfo
+from edge_orm.node.models import Cardinality, FieldInfo, classproperty
 from edge_orm import (
     Node,
     Insert,
@@ -24,7 +24,7 @@ from edge_orm import (
 )
 
 FilterConnector = resolver_enums.FilterConnector
-from .db_enums import *
+from . import db_enums as enums
 
 CLIENT = create_async_client(dsn=os.environ["EDGEDB_DSN"])
 from pydantic import EmailStr
@@ -39,7 +39,7 @@ class User(Node):
     created_at_: T.Union[datetime, UnsetType] = Field(UNSET, alias="created_at")
     name: str = Field(...)
     age: T.Optional[int] = Field(None)
-    user_role_: T.Union[T.Optional[UserRole], UnsetType] = Field(
+    user_role_: T.Union[T.Optional[enums.UserRole], UnsetType] = Field(
         UNSET, alias="user_role"
     )
     images_: T.Union[T.Optional[T.List[str]], UnsetType] = Field(UNSET, alias="images")
@@ -63,7 +63,7 @@ class User(Node):
         return self.created_at_  # type: ignore
 
     @property
-    def user_role(self) -> T.Optional[UserRole]:
+    def user_role(self) -> T.Optional[enums.UserRole]:
         # if self.user_role_ is UNSET:
         if "user_role_" not in self.__fields_set__:
             raise errors.AppendixPropertyException("user_role is unset")
@@ -294,7 +294,7 @@ class UserInsert(Insert):
     created_at: T.Union[datetime, UnsetType] = Field(UNSET)
     name: str
     age: T.Union[int, None, UnsetType] = Field(UNSET)
-    user_role: T.Union[UserRole, None, UnsetType] = Field(UNSET)
+    user_role: T.Union[enums.UserRole, None, UnsetType] = Field(UNSET)
     images: T.Union[T.List[str], None, UnsetType] = Field(UNSET)
     email: T.Union[EmailStr, None, UnsetType] = Field(UNSET)
     friends: T.Optional[UserResolver] = None
@@ -305,7 +305,7 @@ class UserPatch(Patch):
     created_at: T.Union[T.Optional[datetime], UnsetType] = Field(UNSET)
     name: T.Union[str, UnsetType] = Field(UNSET)
     age: T.Union[T.Optional[int], UnsetType] = Field(UNSET)
-    user_role: T.Union[T.Optional[UserRole], UnsetType] = Field(UNSET)
+    user_role: T.Union[T.Optional[enums.UserRole], UnsetType] = Field(UNSET)
     images: T.Union[T.Optional[T.List[str]], UnsetType] = Field(UNSET)
     email: T.Union[T.Optional[EmailStr], UnsetType] = Field(UNSET)
     friends: T.Union[T.Optional[UserResolver], UnsetType] = Field(
@@ -339,19 +339,42 @@ class UserResolver(Resolver[User, UserInsert, UserPatch]):
         id: T.Optional[T.Any] = None,
         phone_number: T.Optional[T.Any] = None,
     ) -> User | None:
-        return await self._get(
-            client=client, **{"id": id, "phone_number": phone_number}
-        )
+        kwargs = {"id": id, "phone_number": phone_number}
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        if len(kwargs) != 1:
+            raise ResolverException(f"Must only give one argument, received {kwargs}.")
+        field_name, value = list(kwargs.items())[0]
+        return await self._get(field_name=field_name, value=value, client=client)
 
     async def gerror(
         self,
         *,
-        client: AsyncIOClient = None,
+        client: AsyncIOClient | None = None,
         id: T.Optional[T.Any] = None,
         phone_number: T.Optional[T.Any] = None,
     ) -> User:
-        return await self._gerror(
-            client=client, **{"id": id, "phone_number": phone_number}
+        kwargs = {"id": id, "phone_number": phone_number}
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        if len(kwargs) != 1:
+            raise ResolverException(f"Must only give one argument, received {kwargs}.")
+        field_name, value = list(kwargs.items())[0]
+        return await self._get(field_name=field_name, value=value, client=client)
+
+    async def update_one(
+        self,
+        patch: UserPatch,
+        *,
+        client: AsyncIOClient | None = None,
+        id: T.Optional[T.Any] = None,
+        phone_number: T.Optional[T.Any] = None,
+    ) -> User:
+        kwargs = {"id": id, "phone_number": phone_number}
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        if len(kwargs) != 1:
+            raise ResolverException(f"Must only give one argument, received {kwargs}.")
+        field_name, value = list(kwargs.items())[0]
+        return await self._update_one(
+            patch=patch, field_name=field_name, value=value, client=client
         )
 
     def filter_by(
@@ -529,12 +552,38 @@ class DateModelResolver(Resolver[DateModel, DateModelInsert, DateModelPatch]):
     async def get(
         self, *, client: AsyncIOClient | None = None, id: T.Optional[T.Any] = None
     ) -> DateModel | None:
-        return await self._get(client=client, **{"id": id})
+        kwargs = {"id": id}
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        if len(kwargs) != 1:
+            raise ResolverException(f"Must only give one argument, received {kwargs}.")
+        field_name, value = list(kwargs.items())[0]
+        return await self._get(field_name=field_name, value=value, client=client)
 
     async def gerror(
-        self, *, client: AsyncIOClient = None, id: T.Optional[T.Any] = None
+        self, *, client: AsyncIOClient | None = None, id: T.Optional[T.Any] = None
     ) -> DateModel:
-        return await self._gerror(client=client, **{"id": id})
+        kwargs = {"id": id}
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        if len(kwargs) != 1:
+            raise ResolverException(f"Must only give one argument, received {kwargs}.")
+        field_name, value = list(kwargs.items())[0]
+        return await self._get(field_name=field_name, value=value, client=client)
+
+    async def update_one(
+        self,
+        patch: DateModelPatch,
+        *,
+        client: AsyncIOClient | None = None,
+        id: T.Optional[T.Any] = None,
+    ) -> DateModel:
+        kwargs = {"id": id}
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        if len(kwargs) != 1:
+            raise ResolverException(f"Must only give one argument, received {kwargs}.")
+        field_name, value = list(kwargs.items())[0]
+        return await self._update_one(
+            patch=patch, field_name=field_name, value=value, client=client
+        )
 
     def filter_by(
         self,

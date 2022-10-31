@@ -6,7 +6,9 @@ from edge_orm import ResolverException, resolver_enums, logger
 from tests.generator.gen import db_hydrated as db
 from devtools import debug
 import tests
+from faker import Faker
 
+fake = Faker()
 import asyncio
 
 
@@ -197,6 +199,8 @@ async def test_query() -> None:
 
 @pytest.mark.asyncio
 async def test_gets() -> None:
+    patch = db.UserPatch()
+    patch.name = "jfidjffd"
     phone_number = "+16666666666"
     user = (
         await db.UserResolver()
@@ -223,15 +227,22 @@ from edge_orm.resolver.utils import model_to_set_str_vars
 
 @pytest.mark.asyncio
 async def test_model_to_set_str_vars() -> None:
-    insert = db.UserInsert(name="Juana", phone_number="+14028939830099", email="fdij")
+    insert = db.UserInsert(
+        name=fake.name(),
+        phone_number=fake.phone_number(),
+        email=fake.email(),
+        friends=db.UserResolver().limit(1),
+        user_role=db.enums.UserRole.buyer,
+    )
     s, variables = model_to_set_str_vars(
         model=insert, conversion_map=db.User.EdgeConfig.insert_edgedb_conversion_map
     )
     print(f"{s=}")
     debug(variables)
-    assert len(variables) == 2
+    assert len(variables) == 4
     user = (
         await db.UserResolver()
+        .friends()
         .friends(db.UserResolver().filter_by(phone_number="4-03i-0k"))
         .insert_one(insert=insert)
     )

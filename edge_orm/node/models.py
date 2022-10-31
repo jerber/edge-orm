@@ -50,26 +50,6 @@ class EdgeConfigBase(BaseModel):
 COMPUTED = dict[str, T.Any]
 
 
-class Node(BaseModel):
-    id: UUID
-
-    EdgeConfig: T.ClassVar[EdgeConfigBase]
-
-    _computed: COMPUTED = PrivateAttr(default=dict())
-
-    @property
-    def computed(self) -> COMPUTED:
-        return self._computed
-
-    class Config:
-        allow_mutation = False
-        validate_assignment = True
-        arbitrary_types_allowed = True
-
-
-NodeType = T.TypeVar("NodeType", bound=Node)
-
-
 class Insert(BaseModel):
     pass
 
@@ -84,5 +64,33 @@ class Patch(BaseModel):
 
     class Config:
         allow_mutation = True
+        validate_assignment = True
+        arbitrary_types_allowed = True
+
+
+class classproperty(property):
+    def __get__(self, owner_self, owner_cls):  # type: ignore
+        return self.fget(owner_cls)  # type: ignore
+
+
+class Node(BaseModel):
+    id: UUID
+
+    EdgeConfig: T.ClassVar[EdgeConfigBase]
+
+    _computed: COMPUTED = PrivateAttr(default=dict())
+
+    @property
+    def computed(self) -> COMPUTED:
+        return self._computed
+
+    """
+    @classproperty
+    def Insert(self) -> T.Type[Insert]:  # example of how this could work
+        return Insert
+    """
+
+    class Config:
+        allow_mutation = False
         validate_assignment = True
         arbitrary_types_allowed = True

@@ -116,21 +116,25 @@ class Param(BaseModel):
                 return True
         return False
 
-    def edgedb_core_type(self) -> str:
+    def edgedb_core_type(self, enums_path: str = None) -> str:
         pattern = r"::(\w+)"
         core_types = re.findall(pattern, self.target.name)
         if len(core_types) != 1:
             raise IntrospectionException(
                 f"Problem parsing core types {core_types=} for {self.name=}, {self.dict()=}"
             )
-        return core_types[0]
+        s = core_types[0]
+        if enums_path:
+            if self.target.name.startswith("default::"):
+                s = f"{enums_path}.{s}"
+        return s
 
     @property
     def type_str(self) -> str:
         """returns [Person] or T.Optional[Person] or T.List[str] or str"""
         # if it is a property, make MANY a SET. If it is a link, make it a List
         edgedb_type_str = self.target.name
-        edgedb_core_type = self.edgedb_core_type()
+        edgedb_core_type = self.edgedb_core_type(enums_path="enums")
 
         python_type = (
             edgedb_to_python_type_mapping.get(edgedb_core_type) or edgedb_core_type

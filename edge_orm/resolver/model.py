@@ -51,6 +51,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
     _node_config: T.ClassVar[EdgeConfigBase]
 
     is_count: bool = False
+    update_operation: enums.UpdateOperation | None = None
 
     def __init__(self, **data: T.Any) -> None:
         super().__init__(**data)
@@ -279,11 +280,13 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         include_select: bool,
         prefix: str,
         include_filters: bool = True,
+        include_detached: bool = False,
         check_for_intersecting_variables: bool = False,
         model_name_override: str = None,
     ) -> tuple[str, VARS]:
         model_name = model_name_override or self._node_config.model_name
-        select = f"SELECT {model_name} " if include_select else ""
+        detached_str = f" DETACHED" if include_detached else ""
+        select = f"SELECT{detached_str} {model_name} " if include_select else ""
         (
             nested_query_str,
             nested_vars,
@@ -415,14 +418,15 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         return model_lst[0]
 
     async def _get(
-        self, *, client: edgedb.AsyncIOClient | None = None, **kwargs: T.Any
+        self,
+        field_name: str,
+        value: T.Any,
+        *,
+        client: edgedb.AsyncIOClient | None = None,
     ) -> NodeType | None:
         # TODO merge
-        kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        if len(kwargs) != 1:
-            raise errors.ResolverException(
-                f"Must only give one argument, received {kwargs}."
-            )
+        if value is None:
+            raise errors.ResolverException("Value must not be None.")
 
         if existing_filter_str := self.has_filters():
             raise errors.ResolverException(
@@ -430,11 +434,10 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
                 f"If you wish to GET an object, use a resolver that does not have root filters."
             )
 
-        key, value = list(kwargs.items())[0]
-        if key not in self._node_config.exclusive_fields:
-            raise errors.ResolverException(f"Field '{key}' is not exclusive.")
+        if field_name not in self._node_config.exclusive_fields:
+            raise errors.ResolverException(f"Field '{field_name}' is not exclusive.")
 
-        self._filter_by(**kwargs)
+        self._filter_by(**{field_name: value})
         query_str, variables = self.full_query_str_and_vars(
             include_select=True, prefix=""
         )
@@ -455,12 +458,16 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
             return self._node_cls(**raw_response)
 
     async def _gerror(
-        self, *, client: edgedb.AsyncIOClient | None = None, **kwargs: T.Any
+        self,
+        field_name: str,
+        value: T.Any,
+        *,
+        client: edgedb.AsyncIOClient | None = None,
     ) -> NodeType:
-        model = await self._get(client=client, **kwargs)
+        model = await self._get(field_name=field_name, value=value, client=client)
         if not model:
             raise errors.ResolverException(
-                f"No {self._node_config.model_name} in db with fields {kwargs}."
+                f"No {self._node_config.model_name} in db with fields {field_name} = {value}."
             )
         return model
 
@@ -469,6 +476,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
     async def insert_one(
         self, insert: InsertType, *, client: edgedb.AsyncIOClient | None = None
     ) -> NodeType:
+        # TODO links + merge resolver
         if existing_filter_str := self.has_filters():
             raise errors.ResolverException(
                 f"This resolver already has filters: {existing_filter_str}. "
@@ -490,6 +498,8 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
                 variables={**insert_variables, **select_variables},
                 only_one=True,
             )
+        if not raw_response:
+            raise errors.ResolverException("Response from insert was None.")
         with span.span(op=f"parse.{self._node_config.model_name}"):
             return self._node_cls(**raw_response)
 
@@ -499,17 +509,50 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         # TODO
         ...
 
-    async def update_one(
-        self, patch: PatchType, *, client: edgedb.AsyncIOClient | None = None
+    async def _update_one(
+        self,
+        patch: PatchType,
+        *,
+        field_name: str,
+        value: T.Any,
+        client: edgedb.AsyncIOClient | None = None,
     ) -> NodeType:
-        # TODO
-        ...
+        if self.has_filters():
+            raise errors.ResolverException(
+                "update_one requires a resolver with *no* root filters. "
+                "Instead, pass in the exclusive field + value."
+            )
+        if value is None:
+            raise errors.ResolverException("")
+        if field_name not in self._node_config.exclusive_fields:
+            raise errors.ResolverException(f"Field '{field_name}' is not exclusive.")
+
+        update_s, update_variables = utils.model_to_set_str_vars(
+            model=patch, conversion_map=self._node_config.patch_edgedb_conversion_map
+        )
+        print(f"{update_s=}, {update_variables=}")
+
+        # TODO throw error if return is None
 
     async def update_many(
-        self, patch: PatchType, *, client: edgedb.AsyncIOClient | None = None
+        self,
+        patch: PatchType,
+        *,
+        update_all: bool = False,
+        client: edgedb.AsyncIOClient | None = None,
     ) -> list[NodeType]:
-        # TODO
-        ...
+        if not update_all:
+            if self.has_filters():
+                raise errors.ResolverException(
+                    "You did not give filters which means this will update *all* models. "
+                    "If this is your intention, pass update_all=True."
+                )
+
+        update_s, update_variables = utils.model_to_set_str_vars(
+            model=patch, conversion_map=self._node_config.patch_edgedb_conversion_map
+        )
+        # ensure filters exist if not update all
+        print(f"{update_s=}, {update_variables=}")
 
     """HELPERS"""
 

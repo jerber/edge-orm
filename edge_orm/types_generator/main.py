@@ -85,10 +85,10 @@ def imports(enums_module: str) -> str:
         "from decimal import Decimal",
         "from edgedb import RelativeDuration, AsyncIOClient, create_async_client",
         "from pydantic import BaseModel, Field, PrivateAttr, validator",
-        f"from {PATH_TO_MODULE}.node.models import Cardinality, FieldInfo",
+        f"from {PATH_TO_MODULE}.node.models import Cardinality, FieldInfo, classproperty",
         f"from {PATH_TO_MODULE} import Node, Insert, Patch, EdgeConfigBase, Resolver, NodeException, ResolverException, UNSET, UnsetType, validators, errors, resolver_enums",
         "FilterConnector = resolver_enums.FilterConnector",
-        f"from .{enums_module} import *",
+        f"from . import {enums_module} as enums",
     ]
     return "\n".join(lines)
 
@@ -174,21 +174,41 @@ def {link.name}__count(self, _: T.Optional[{link_resolver_name}] = None, /, make
     """
 
 
-def build_get_functions_str(node_name: str, exclusive_field_names: T.Set[str]) -> str:
+def build_exclusive_functions_str(
+    node_name: str, exclusive_field_names: T.Set[str]
+) -> str:
     exclusive_field_names_lst = sorted(list(exclusive_field_names))
     params_fields_str = ", ".join(
         [f"{f}: T.Optional[T.Any] = None" for f in exclusive_field_names_lst]
     )
     dict_fields_str = ", ".join([f'"{f}": {f}' for f in exclusive_field_names_lst])
+
+    validation_str = f"""
+kwargs = {{{dict_fields_str}}}
+kwargs = {{k: v for k, v in kwargs.items() if v is not None}}
+if len(kwargs) != 1:
+    raise ResolverException(
+        f"Must only give one argument, received {{kwargs}}."
+    )
+field_name, value = list(kwargs.items())[0]
+""".strip()
+
     get_str = f"""
 async def get(self, *, client: AsyncIOClient | None = None, {params_fields_str}) -> {node_name} | None:
-    return await self._get(client=client, **{{{dict_fields_str}}})
+{indent_lines(validation_str)}
+    return await self._get(field_name=field_name, value=value, client=client)
     """
     gerror_str = f"""
-async def gerror(self, *, client: AsyncIOClient = None, {params_fields_str}) -> {node_name}:
-    return await self._gerror(client=client, **{{{dict_fields_str}}})
+async def gerror(self, *, client: AsyncIOClient | None = None, {params_fields_str}) -> {node_name}:
+{indent_lines(validation_str)}
+    return await self._get(field_name=field_name, value=value, client=client)
     """
-    return f"{get_str}\n{gerror_str}"
+    update_one_str = f"""
+async def update_one(self, patch: {node_name}Patch, *, client: AsyncIOClient | None = None, {params_fields_str}) -> {node_name}:
+{indent_lines(validation_str)}
+    return await self._update_one(patch=patch, field_name=field_name, value=value, client=client)
+    """
+    return f"{get_str}\n{gerror_str}\n{update_one_str}\n"
 
 
 def build_include_fields_function(
@@ -662,7 +682,7 @@ def {prop.name}(self) -> {type_str}:
     # resolver
     resolver_properties_str = f"_node_cls = {object_type.node_name}"
     resolver_link_functions_str = "\n".join(resolver_function_strs)
-    resolver_get_functions_str = build_get_functions_str(
+    resolver_get_functions_str = build_exclusive_functions_str(
         node_name=object_type.node_name, exclusive_field_names=exclusive_fields
     )
     resolver_include_fields_str = build_include_fields_function(
