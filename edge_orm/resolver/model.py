@@ -1,9 +1,12 @@
 import typing as T
+import json
+import re
 import edgedb
 from pydantic import BaseModel, PrivateAttr
 from pydantic.main import ModelMetaclass
 from edge_orm.node import Node, Insert, Patch, EdgeConfigBase
 from edge_orm.logs import logger
+from edge_orm.external import encoders
 from edge_orm import helpers, execute, span
 from . import enums, errors, utils
 from .nested_resolvers import NestedResolvers
@@ -485,15 +488,145 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
                 variables={**select_variables, **insert_variables},
                 only_one=True,
             )
-        if not raw_response:
-            raise errors.ResolverException("No response from insert.")
+        raw_response = T.cast(RAW_RESP_ONE, raw_response)
         return self.parse_obj_with_cache(raw_response)
 
     async def insert_many(
         self, inserts: list[InsertType], *, client: edgedb.AsyncIOClient | None = None
     ) -> list[NodeType]:
-        # TODO
-        ...
+        if not inserts:
+            return []
+        conversion_map = self._node_config.insert_edgedb_conversion_map
+        first_insert_s, _ = utils.model_to_set_str_vars(
+            model=inserts[0], conversion_map=conversion_map, json_get_item="item"
+        )
+        insert_vars_list: list[VARS] = []
+        for insert in inserts:
+            # confirm that the INSERT STRS of all of these are the same
+            insert_s, insert_vars = utils.model_to_set_str_vars(
+                model=insert, conversion_map=conversion_map, json_get_item="item"
+            )
+            if insert_s != first_insert_s:
+                raise errors.ResolverException(
+                    f"Not all inserts have the same form: {insert_s} != {first_insert_s}."
+                )
+            insert_vars_list.append(insert_vars)
+
+        insert_s = f"INSERT {self.model_name} {first_insert_s}"
+        select_s, select_variables = self.full_query_str_and_vars(
+            prefix="", model_name_override="model", include_select=False
+        )
+
+        # for insert_s, replace $x with json_get(item, "x")
+        insert_s = re.sub(
+            pattern=r"\$(\w+)", repl='json_get(item, "' + r"\1" + '")', string=insert_s
+        )
+
+        final_insert_str = f"""
+        with
+            raw_data := <json>$__data,
+        for item in json_array_unpack(raw_data) union ({insert_s}) {select_s}
+                """
+        variables = {
+            **select_variables,
+            "__data": json.dumps(encoders.jsonable_encoder(insert_vars_list)),
+        }
+        debug(variables)
+        with span.span(op=f"edgedb.add_many.{self.model_name}"):
+            raw_response = await execute.query(
+                client=client or self._node_config.client,
+                query_str=final_insert_str,
+                variables=variables,
+                only_one=False,
+            )
+        raw_response = T.cast(RAW_RESP_MANY, raw_response)
+        return self.parse_obj_with_cache_list(raw_response)
+
+    async def insert_many_old(
+        self,
+        inserts: list[InsertType],
+        universal_link_insert: PatchType = None,
+        *,
+        client: edgedb.AsyncIOClient | None = None,
+    ) -> list[NodeType]:
+        # TODO merge
+        # TODO manage links too... how? Maybe added resolvers for this
+        if not inserts:
+            return []
+        # all inserts need to have the same fields set so the *for* loop in EdgeQL works
+        fields_set = inserts[0].__fields_set__
+        conversion_map = self._node_config.insert_edgedb_conversion_map
+        conversion_map_keys = conversion_map.keys()
+        link_conversion_map = self._node_config.insert_link_conversion_map
+        link_conversion_map_keys = link_conversion_map.keys()
+        for insert in inserts:
+            insert_fields_set = insert.__fields_set__
+            if insert_fields_set != fields_set:
+                raise errors.ResolverException(
+                    f"insert_many requires all inserts have the same fields set. "
+                    f"{insert_fields_set} != {fields_set=}"
+                )
+            if intersect := (insert_fields_set & link_conversion_map_keys):
+                raise errors.ResolverException(
+                    f"Insert cannot have set link resolvers but given: {intersect} links. "
+                    f"Use universal_link_insert for inserting links."
+                )
+
+        if universal_link_insert:
+            # ensure this does not have any NON resolver fields
+            if intersect := (
+                universal_link_insert.__fields_set__ & conversion_map_keys
+            ):
+                raise errors.ResolverException(
+                    f"Universal link insert cannot have set non link resolvers but given: {intersect} non links. "
+                    f"Use inserts for inserting non links."
+                )
+
+            # now build the link ones
+            link_s, link_vars = utils.model_to_set_str_vars(
+                model=universal_link_insert, conversion_map=conversion_map
+            )
+        else:
+            link_s, link_vars = None, {}
+
+        # build the insert_str then replace the vars with the json code
+        insert_s, _ = utils.model_to_set_str_vars(
+            model=inserts[0],
+            conversion_map=conversion_map,
+            json_get_item="item",
+            additional_link_str=link_s,
+        )
+        insert_s = f"INSERT {self.model_name} {insert_s}"
+
+        json_lst: list[VARS] = []
+        for insert in inserts:
+            _, insert_vars = utils.model_to_set_str_vars(
+                model=insert,
+                conversion_map=conversion_map,
+            )
+            json_lst.append(insert_vars)
+
+        select_s, select_variables = self.full_query_str_and_vars(
+            prefix="", model_name_override="model", include_select=False
+        )
+        final_insert_str = f"""
+with
+    raw_data := <json>$__data,
+for item in json_array_unpack(raw_data) union ({insert_s}) {select_s}
+        """
+        with span.span(op=f"edgedb.add_many.{self.model_name}"):
+            raw_response = await execute.query(
+                client=client or self._node_config.client,
+                query_str=final_insert_str,
+                variables={
+                    **select_variables,
+                    **link_vars,
+                    "__data": json.dumps(encoders.jsonable_encoder(json_lst)),
+                },
+                only_one=False,
+            )
+        raw_response = T.cast(RAW_RESP_MANY, raw_response)
+        return self.parse_obj_with_cache_list(raw_response)
 
     async def _update(
         self, patch: PatchType, only_one: bool, client: edgedb.AsyncIOClient | None
