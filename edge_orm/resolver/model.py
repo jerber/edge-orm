@@ -62,6 +62,10 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
                 - self._node_config.computed_properties
             )
 
+    @property
+    def model_name(self) -> str:
+        return self._node_config.model_name
+
     @classmethod
     def node_field_names(cls: T.Type[ThisResolverType]) -> set[str]:
         return {field.alias for field in cls._node_cls.__fields__.values()}
@@ -284,7 +288,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         check_for_intersecting_variables: bool = False,
         model_name_override: str = None,
     ) -> tuple[str, VARS]:
-        model_name = model_name_override or self._node_config.model_name
+        model_name = model_name_override or self.model_name
         detached_str = f" DETACHED" if include_detached else ""
         select = f"SELECT{detached_str} {model_name} " if include_select else ""
         (
@@ -383,8 +387,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
             include_select=True, prefix=""
         )
         with span.span(
-            op=f"edgedb.query.{self._node_config.model_name}",
-            description=query_str[:200],
+            op=f"edgedb.query.{self.model_name}", description=query_str[:200]
         ):
             raw_response = await execute.query(
                 client=client or self._node_config.client,
@@ -399,7 +402,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         if not raw_response:
             return []
         with span.span(
-            op=f"parse.{self._node_config.model_name}",
+            op=f"parse.{self.model_name}",
             description=str(len(raw_response)),
         ):
             return [self._node_cls(**d) for d in raw_response]
@@ -427,24 +430,18 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         # TODO merge
         if value is None:
             raise errors.ResolverException("Value must not be None.")
-
+        if field_name not in self._node_config.exclusive_fields:
+            raise errors.ResolverException(f"Field '{field_name}' is not exclusive.")
         if existing_filter_str := self.has_filters():
             raise errors.ResolverException(
                 f"This resolver already has filters: {existing_filter_str}. "
                 f"If you wish to GET an object, use a resolver that does not have root filters."
             )
-
-        if field_name not in self._node_config.exclusive_fields:
-            raise errors.ResolverException(f"Field '{field_name}' is not exclusive.")
-
         self._filter_by(**{field_name: value})
         query_str, variables = self.full_query_str_and_vars(
             include_select=True, prefix=""
         )
-        with span.span(
-            op=f"edgedb.get.{self._node_config.model_name}",
-            description=query_str[:200],
-        ):
+        with span.span(op=f"edgedb.get.{self.model_name}", description=query_str[:200]):
             raw_response = await execute.query(
                 client=client or self._node_config.client,
                 query_str=query_str,
@@ -454,7 +451,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
 
         if not raw_response:
             return None
-        with span.span(op=f"parse.{self._node_config.model_name}"):
+        with span.span(op=f"parse.{self.model_name}"):
             return self._node_cls(**raw_response)
 
     async def _gerror(
@@ -467,7 +464,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         model = await self._get(field_name=field_name, value=value, client=client)
         if not model:
             raise errors.ResolverException(
-                f"No {self._node_config.model_name} in db with fields {field_name} = {value}."
+                f"No {self.model_name} in db with fields {field_name} = {value}."
             )
         return model
 
@@ -485,22 +482,22 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         insert_s, insert_variables = utils.model_to_set_str_vars(
             model=insert, conversion_map=self._node_config.insert_edgedb_conversion_map
         )
-        insert_s = f"INSERT {self._node_config.model_name} {insert_s}"
+        insert_s = f"INSERT {self.model_name} {insert_s}"
         # do not need the prefix since any var HAS to be nested, so will already have prefixes
         select_s, select_variables = self.full_query_str_and_vars(
             prefix="", model_name_override="model", include_select=True
         )
         final_insert_s = f"WITH model := ({insert_s}) {select_s}"
-        with span.span(op=f"edgedb.add.{self._node_config.model_name}"):
+        with span.span(op=f"edgedb.add.{self.model_name}"):
             raw_response = await execute.query(
                 client=client or self._node_config.client,
                 query_str=final_insert_s,
-                variables={**insert_variables, **select_variables},
+                variables={**select_variables, **insert_variables},
                 only_one=True,
             )
         if not raw_response:
-            raise errors.ResolverException("Response from insert was None.")
-        with span.span(op=f"parse.{self._node_config.model_name}"):
+            raise errors.ResolverException("No response from insert.")
+        with span.span(op=f"parse.{self.model_name}"):
             return self._node_cls(**raw_response)
 
     async def insert_many(
@@ -517,22 +514,40 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         value: T.Any,
         client: edgedb.AsyncIOClient | None = None,
     ) -> NodeType:
-        if self.has_filters():
+        if existing_filter_str := self.has_filters():
             raise errors.ResolverException(
-                "update_one requires a resolver with *no* root filters. "
-                "Instead, pass in the exclusive field + value."
+                f"update_one requires a resolver with *no* root filters but this resolver has filters: "
+                f"{existing_filter_str}. Instead, pass in the exclusive field + value."
             )
         if value is None:
-            raise errors.ResolverException("")
+            raise errors.ResolverException("Value must not be None.")
         if field_name not in self._node_config.exclusive_fields:
             raise errors.ResolverException(f"Field '{field_name}' is not exclusive.")
+        self._filter_by(**{field_name: value})
 
         update_s, update_variables = utils.model_to_set_str_vars(
             model=patch, conversion_map=self._node_config.patch_edgedb_conversion_map
         )
-        print(f"{update_s=}, {update_variables=}")
-
-        # TODO throw error if return is None
+        filters_s, filters_vars = self.build_filters_str_and_vars(prefix="")
+        update_s = f"UPDATE {self.model_name} {filters_s} SET {update_s}"
+        select_s, select_variables = self.full_query_str_and_vars(
+            prefix="",
+            model_name_override="model",
+            include_select=True,
+            include_filters=False,
+        )
+        final_update_s = f"WITH model := ({update_s}) {select_s}"
+        with span.span(op=f"edgedb.update.{self.model_name}"):
+            raw_response = await execute.query(
+                client=client or self._node_config.client,
+                query_str=final_update_s,
+                variables={**select_variables, **filters_vars, **update_variables},
+                only_one=True,
+            )
+        if not raw_response:
+            raise errors.ResolverException("No object to update.")
+        with span.span(op=f"parse.{self.model_name}"):
+            return self._node_cls(**raw_response)
 
     async def update_many(
         self,
