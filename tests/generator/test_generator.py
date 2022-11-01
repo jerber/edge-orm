@@ -31,6 +31,7 @@ db_config_map: dict[str, DBConfig] = {
                         validate_as_basemodel=False,
                     )
                 },
+                mutate_on_update={"last_updated_at": "datetime_current()"},
             )
         },
     )

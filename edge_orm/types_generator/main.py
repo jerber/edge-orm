@@ -35,6 +35,7 @@ class NodeConfig(BaseModel):
     ignore_properties: T.List[str] = []
     basemodel_properties: T.Dict[str, PropertyConfig] = {}
     custom_annotations: T.Dict[str, str] = {}
+    mutate_on_update: T.Dict[str, str] = {}
 
 
 class DBConfig(BaseModel):
@@ -273,6 +274,7 @@ def build_orm_config(
     computed_properties: set[str],
     basemodel_properties: T.Iterable[str],
     custom_annotations: T.Iterable[str],
+    mutate_on_update: dict[str, str],
     node_edgedb_conversion_map: CONVERSION_MAP,
     insert_edgedb_conversion_map: CONVERSION_MAP,
     patch_edgedb_conversion_map: CONVERSION_MAP,
@@ -290,6 +292,7 @@ EdgeConfig: T.ClassVar[EdgeConfigBase] = EdgeConfigBase(
     computed_properties = {stringify_set(computed_properties)},
     basemodel_properties = {stringify_set(set(basemodel_properties))},
     custom_annotations = {stringify_set(set(custom_annotations))},
+    mutate_on_update = {stringify_dict(mutate_on_update)},
     
     node_edgedb_conversion_map = {stringify_basemodel_dict(node_edgedb_conversion_map)},
     insert_edgedb_conversion_map = {stringify_basemodel_dict(insert_edgedb_conversion_map)},
@@ -613,6 +616,7 @@ def {prop.name}(self) -> {type_str}:
     custom_annotations = (
         [] if not node_config else node_config.custom_annotations.keys()
     )
+    mutate_on_update = {} if not node_config else node_config.mutate_on_update
 
     orm_config_str = build_orm_config(
         model_name=object_type.node_name,
@@ -622,6 +626,7 @@ def {prop.name}(self) -> {type_str}:
         computed_properties=computed_properties,
         basemodel_properties=basemodel_properties,
         custom_annotations=custom_annotations,
+        mutate_on_update=mutate_on_update,
         node_edgedb_conversion_map=node_edgedb_conversion_map,
         insert_edgedb_conversion_map=insert_edgedb_conversion_map,
         patch_edgedb_conversion_map=patch_edgedb_conversion_map,
@@ -685,7 +690,12 @@ def {prop.name}(self) -> {type_str}:
     )
 
     # resolver
-    resolver_properties_str = f"_node_cls = {object_type.node_name}"
+    clses = [
+        f"_node_cls = {object_type.node_name}",
+        f"_insert_cls = {object_type.node_name}Insert",
+        f"_patch_cls = {object_type.node_name}Patch",
+    ]
+    resolver_properties_str = "\n".join(clses)
     resolver_link_functions_str = "\n".join(resolver_function_strs)
     resolver_get_functions_str = build_exclusive_functions_str(
         node_name=object_type.node_name, exclusive_field_names=exclusive_fields

@@ -54,6 +54,9 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
     _nested_resolvers: NestedResolvers = PrivateAttr(default_factory=NestedResolvers)
 
     _node_cls: T.ClassVar[T.Type[NodeType]]  # type: ignore
+    _insert_cls: T.ClassVar[T.Type[InsertType]]  # type: ignore
+    _patch_cls: T.ClassVar[T.Type[PatchType]]  # type: ignore
+
     _node_config: T.ClassVar[EdgeConfigBase]
 
     is_count: bool = False
@@ -463,8 +466,66 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
 
     """MUTATION METHODS"""
 
+    @staticmethod
+    def validate_upsert_fields(
+        upsert_given_conflict_on: str = None,
+        return_model_for_conflict_on: str = None,
+        custom_conflict_on_str: str = None,
+    ) -> None:
+        if custom_conflict_on_str:
+            if return_model_for_conflict_on or upsert_given_conflict_on:
+                raise errors.ResolverException(
+                    "You cannot give a custom conflict string with other conflict inputs."
+                )
+        if return_model_for_conflict_on and upsert_given_conflict_on:
+            raise errors.ResolverException(
+                "You cannot both suppress a conflict and upsert given a conflict."
+            )
+
+    def build_conflict_str_and_vars(
+        self,
+        insert: InsertType,
+        *,
+        mutate_on_update: bool,
+        custom_conflict_on_str: str | None,
+        upsert_given_conflict_on: str | None,
+        return_model_for_conflict_on: str | None,
+    ) -> tuple[str, VARS]:
+        self.validate_upsert_fields(
+            upsert_given_conflict_on=upsert_given_conflict_on,
+            return_model_for_conflict_on=return_model_for_conflict_on,
+            custom_conflict_on_str=custom_conflict_on_str,
+        )
+
+        conflict_str = ""
+        conflict_variables: VARS = {}
+
+        if custom_conflict_on_str:
+            conflict_str = custom_conflict_on_str
+        elif upsert_given_conflict_on:
+            patch = self.patch_from_insert(insert)
+            conflict_s, conflict_variables = utils.model_to_set_str_vars(
+                model=patch,
+                conversion_map=self._node_config.patch_edgedb_conversion_map,
+                additional_link_str=self.build_mutate_on_update_str(
+                    patch=patch, mutate_on_update=mutate_on_update
+                ),
+            )
+            conflict_str = f"UNLESS CONFLICT ON .{upsert_given_conflict_on} else (UPDATE {self.model_name} SET {conflict_s})"
+        elif return_model_for_conflict_on:
+            conflict_str = f"UNLESS CONFLICT ON .{return_model_for_conflict_on} ELSE (SELECT {self.model_name})"
+
+        return conflict_str, conflict_variables
+
     async def insert_one(
-        self, insert: InsertType, *, client: edgedb.AsyncIOClient | None = None
+        self,
+        insert: InsertType,
+        *,
+        client: edgedb.AsyncIOClient | None = None,
+        upsert_given_conflict_on: str = None,
+        custom_conflict_on_str: str = None,
+        return_model_for_conflict_on: str = False,
+        mutate_on_update: bool = True,
     ) -> NodeType:
         # TODO merge resolver
         if existing_filter_str := self.has_filters():
@@ -476,6 +537,17 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
             model=insert, conversion_map=self._node_config.insert_edgedb_conversion_map
         )
         insert_s = f"INSERT {self.model_name} {insert_s}"
+
+        conflict_str, conflict_variables = self.build_conflict_str_and_vars(
+            insert=insert,
+            upsert_given_conflict_on=upsert_given_conflict_on,
+            custom_conflict_on_str=custom_conflict_on_str,
+            return_model_for_conflict_on=return_model_for_conflict_on,
+            mutate_on_update=mutate_on_update,
+        )
+        if conflict_str:
+            insert_s += f" {conflict_str}"
+
         # do not need the prefix since any var HAS to be nested, so will already have prefixes
         select_s, select_variables = self.full_query_str_and_vars(
             prefix="", model_name_override="model", include_select=True
@@ -485,7 +557,11 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
             raw_response = await execute.query(
                 client=client or self._node_config.client,
                 query_str=final_insert_s,
-                variables={**select_variables, **insert_variables},
+                variables={
+                    **select_variables,
+                    **insert_variables,
+                    **conflict_variables,
+                },
                 only_one=True,
             )
         raw_response = T.cast(RAW_RESP_ONE, raw_response)
@@ -542,11 +618,35 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         raw_response = T.cast(RAW_RESP_MANY, raw_response)
         return self.parse_obj_with_cache_list(raw_response)
 
+    def build_mutate_on_update_str(
+        self, patch: PatchType, mutate_on_update: bool | None
+    ) -> str | None:
+        if mutate_on_update is False:
+            return None
+        mutate_on_update_d = self._node_config.mutate_on_update
+        if not mutate_on_update_d:
+            return None
+        mutate_on_update_strs: list[str] = []
+        for field_name, expression in mutate_on_update_d.items():
+            if field_name not in patch.__fields_set__:
+                mutate_on_update_strs.append(f"{field_name} := {expression}")
+        mutate_on_update_str = ", ".join(mutate_on_update_strs)
+        return mutate_on_update_str
+
     async def _update(
-        self, patch: PatchType, only_one: bool, client: edgedb.AsyncIOClient | None
+        self,
+        patch: PatchType,
+        *,
+        only_one: bool,
+        mutate_on_update: bool,
+        client: edgedb.AsyncIOClient | None,
     ) -> RAW_RESPONSE:
         update_s, update_variables = utils.model_to_set_str_vars(
-            model=patch, conversion_map=self._node_config.patch_edgedb_conversion_map
+            model=patch,
+            conversion_map=self._node_config.patch_edgedb_conversion_map,
+            additional_link_str=self.build_mutate_on_update_str(
+                patch=patch, mutate_on_update=mutate_on_update
+            ),
         )
         filters_s, filters_vars = self.build_filters_str_and_vars(prefix="")
         update_s = f"UPDATE {self.model_name} {filters_s} SET {update_s}"
@@ -588,12 +688,17 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         field_name: str,
         value: T.Any,
         client: edgedb.AsyncIOClient | None = None,
+        mutate_on_update: bool = True,
     ) -> NodeType:
+        if not patch.__fields_set__:
+            raise errors.ResolverException("Patch is empty.")
         self.validate_field_name_value_filters(
             operation_name="update_one", field_name=field_name, value=value
         )
         self._filter_by(**{field_name: value})
-        raw_response = await self._update(patch=patch, only_one=True, client=client)
+        raw_response = await self._update(
+            patch=patch, only_one=True, client=client, mutate_on_update=mutate_on_update
+        )
         raw_response = T.cast(RAW_RESP_ONE, raw_response)
         if not raw_response:
             raise errors.ResolverException("No object to update.")
@@ -605,14 +710,22 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         *,
         update_all: bool = False,
         client: edgedb.AsyncIOClient | None = None,
+        mutate_on_update: bool = True,
     ) -> list[NodeType]:
+        if not patch.__fields_set__:
+            raise errors.ResolverException("Patch is empty.")
         if not update_all:
             if not self.has_filters():
                 raise errors.ResolverException(
                     "You did not give filters which means this will update *all* models. "
                     "If this is your intention, pass update_all=True."
                 )
-        raw_response = await self._update(patch=patch, only_one=False, client=client)
+        raw_response = await self._update(
+            patch=patch,
+            only_one=False,
+            client=client,
+            mutate_on_update=mutate_on_update,
+        )
         raw_response = T.cast(RAW_RESP_MANY, raw_response)
         return self.parse_obj_with_cache_list(raw_response)
 
@@ -688,3 +801,10 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
             if (val := getattr(self, field)) is not None:
                 return val
         return None
+
+    def patch_from_insert(self, insert: InsertType) -> PatchType:
+        patch = self._patch_cls()
+        for field in insert.__fields_set__:
+            if field in self._patch_cls.__fields__:
+                setattr(patch, field, getattr(insert, field))
+        return patch

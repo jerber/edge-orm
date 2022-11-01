@@ -1,9 +1,15 @@
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import random
 import pytest
-from edge_orm import ResolverException, resolver_enums, logger, helpers
+from edge_orm import (
+    ResolverException,
+    resolver_enums,
+    logger,
+    helpers,
+    ExecuteConstraintViolationException,
+)
 from tests.generator.gen import db_hydrated as db
 from devtools import debug
 import tests
@@ -66,3 +72,35 @@ async def test_insert_many_with_links() -> None:
         .insert_many(inserts=[insert, insert2])
     )
     debug(new_users)
+
+
+@pytest.mark.asyncio
+async def test_insert_with_conflict() -> None:
+    # now links
+    phone_number = "945-632-7731"
+    insert = build_insert(phone_number=phone_number)
+    rez = db.UserResolver().include_appendix_properties().include_computed_properties()
+    with pytest.raises(ExecuteConstraintViolationException):
+        new_user = await rez.insert_one(insert)
+    new_user = await rez.insert_one(
+        insert=insert, upsert_given_conflict_on="phone_number"
+    )
+    debug(new_user)
+    assert new_user.name == insert.name
+
+    new_insert = build_insert(phone_number=phone_number)
+    user_returned = await rez.insert_one(
+        insert=new_insert, return_model_for_conflict_on="phone_number"
+    )
+    assert user_returned.name == insert.name
+
+    assert user_returned.last_updated_at > datetime.now(
+        tz=ZoneInfo("America/New_York")
+    ) - timedelta(seconds=4)
+    custom_returned = await rez.insert_one(
+        insert=insert,
+        custom_conflict_on_str="UNLESS CONFLICT ON .phone_number else ( UPDATE User SET { last_updated_at := datetime_current() - <cal::relative_duration>'1 year' } )",
+    )
+    assert custom_returned.last_updated_at < datetime.now(
+        tz=ZoneInfo("America/New_York")
+    ) - timedelta(minutes=10)

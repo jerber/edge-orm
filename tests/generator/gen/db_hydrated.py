@@ -114,6 +114,7 @@ class User(Node):
         computed_properties={"names_of_friends"},
         basemodel_properties={"email"},
         custom_annotations=set(),
+        mutate_on_update={"last_updated_at": "datetime_current()"},
         node_edgedb_conversion_map={
             "id": FieldInfo(
                 cast="std::uuid",
@@ -315,6 +316,8 @@ class UserPatch(Patch):
 
 class UserResolver(Resolver[User, UserInsert, UserPatch]):
     _node_cls = User
+    _insert_cls = UserInsert
+    _patch_cls = UserPatch
 
     def friends(
         self, _: T.Optional[UserResolver] = None, /, make_first: bool = False
@@ -491,6 +494,7 @@ class DateModel(Node):
         computed_properties=set(),
         basemodel_properties=set(),
         custom_annotations=set(),
+        mutate_on_update={},
         node_edgedb_conversion_map={
             "id": FieldInfo(
                 cast="std::uuid",
@@ -562,6 +566,8 @@ class DateModelPatch(Patch):
 
 class DateModelResolver(Resolver[DateModel, DateModelInsert, DateModelPatch]):
     _node_cls = DateModel
+    _insert_cls = DateModelInsert
+    _patch_cls = DateModelPatch
 
     async def get(
         self, *, client: AsyncIOClient | None = None, id: T.Optional[T.Any] = None

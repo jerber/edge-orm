@@ -70,7 +70,7 @@ def model_to_set_str_vars(
     model: Insert | Patch,
     conversion_map: CONVERSION_MAP,
     json_get_item: str = None,
-    additional_link_str: str = None,
+    additional_link_str: str | None = None,
 ) -> tuple[str, "VARS"]:
     """takes in a model dictionary and returns a string that represents a mutation with this dictionary
     eg: {"name": "Jeremy Berman", "age": UNSET, "last_updated": 2022...} -> { name := <str>$name, age := <int>{}, ...}"""

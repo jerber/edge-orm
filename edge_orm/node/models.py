@@ -36,6 +36,7 @@ class EdgeConfigBase(BaseModel):
     computed_properties: set[str]
     basemodel_properties: set[str]
     custom_annotations: set[str]
+    mutate_on_update: dict[str, str]
 
     node_edgedb_conversion_map: CONVERSION_MAP
     insert_edgedb_conversion_map: CONVERSION_MAP
