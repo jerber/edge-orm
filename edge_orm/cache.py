@@ -55,6 +55,6 @@ class Cache(BaseModel):
 
     def val_or_unset(self, edge: str, resolver: "Resolver") -> T.Any:  # type: ignore
         try:
-            self.val(edge=edge, resolver=resolver)
+            return self.val(edge=edge, resolver=resolver)
         except CacheException:
             return UNSET

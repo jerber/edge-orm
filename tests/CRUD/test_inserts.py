@@ -116,7 +116,7 @@ async def test_insert_with_conflict() -> None:
 
 
 @pytest.mark.asyncio
-async def test_caching():
+async def test_caching() -> None:
     rez = (
         db.UserResolver()
         .include_appendix_properties()

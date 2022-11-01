@@ -11,6 +11,7 @@ from edge_orm import helpers, execute, span
 from . import enums, errors, utils
 from .nested_resolvers import NestedResolvers
 from devtools import debug
+from .merging import merge_nested_resolver
 
 NodeType = T.TypeVar("NodeType", bound=Node)
 InsertType = T.TypeVar("InsertType", bound=Insert)
@@ -61,6 +62,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
 
     is_count: bool = False
     update_operation: enums.UpdateOperation | None = None
+    _merged: bool = PrivateAttr(False)
 
     def __init__(self, **data: T.Any) -> None:
         super().__init__(**data)
@@ -316,6 +318,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         check_for_intersecting_variables: bool = False,
         model_name_override: str = None,
     ) -> tuple[str, VARS]:
+        self.merge()
         model_name = model_name_override or self.model_name
         detached_str = f" DETACHED" if include_detached else ""
         select = f"SELECT{detached_str} {model_name} " if include_select else ""
@@ -887,3 +890,8 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
     def parse_obj_with_cache_list(self, lst: RAW_RESP_MANY) -> list[NodeType]:
         with span.span(op=f"parse_list.{self.model_name}", description=f"{len(lst)}"):
             return [self.parse_obj_with_cache(d) for d in lst]
+
+    """merge"""
+
+    def merge(self) -> None:
+        self._nested_resolvers = merge_nested_resolver(self._nested_resolvers)

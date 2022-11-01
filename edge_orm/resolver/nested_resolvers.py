@@ -25,9 +25,27 @@ class NestedResolvers(BaseModel):
         merge: bool = False,
         make_first: bool = False,
     ) -> None:
-        # TODO do merge... i guess worry about this later
+        from .merging import merge_resolvers
+
         if not self.has(edge):
             self.d[edge] = []
+
+        if merge:
+            existing_resolvers: list[ResolverType] = self.get(edge)
+            new_resolvers: list[ResolverType] = []
+            has_merged = False
+            for existing_r in existing_resolvers:
+                if has_merged is False and (
+                    merged_r := merge_resolvers(resolver, existing_r)
+                ):
+                    new_resolvers.append(merged_r)
+                    has_merged = True
+                else:
+                    new_resolvers.append(existing_r)
+            self.d[edge] = new_resolvers
+            if has_merged is True:
+                return
+
         if make_first:
             self.d[edge].insert(0, resolver)
         else:
@@ -45,16 +63,6 @@ class NestedResolvers(BaseModel):
                 if not other.has_subset(edge=edge, resolver=r):
                     return False
         return True
-
-    """
-    def merge(self) -> "NestedResolvers":
-        merged_nested_resolvers = NestedResolvers()
-        for edge, resolvers in self.d.items():
-            for r in resolvers:
-                r.merge()
-                merged_nested_resolvers.add(edge=edge, resolver=r, merge=True)
-        return merged_nested_resolvers
-    """
 
     def edge_to_query_str_and_vars(self, edge: str, prefix: str) -> tuple[str, "VARS"]:
         resolvers: list["Resolver"] = self.get(edge)
@@ -119,3 +127,13 @@ class NestedResolvers(BaseModel):
             return resolvers[index]
         except (IndexError, ValueError):
             return None
+
+    """MERGE"""
+
+    def merge(self) -> "NestedResolvers":
+        merged_nested_resolvers = NestedResolvers()
+        for edge, resolvers in self.d.items():
+            for r in resolvers:
+                r.merge()
+                merged_nested_resolvers.add(edge=edge, resolver=r, merge=True)
+        return merged_nested_resolvers
