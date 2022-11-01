@@ -1,8 +1,16 @@
 import typing as T
 from uuid import UUID
 from enum import Enum
+import edgedb
 from pydantic import BaseModel, PrivateAttr
 from edgedb import AsyncIOClient
+from edge_orm.cache import Cache
+from edge_orm.unset import UNSET
+from .errors import NodeException
+
+if T.TYPE_CHECKING:
+    # from edge_orm.cache import Cache
+    from edge_orm.resolver.model import Resolver
 
 
 class PropertyCardinality(str, Enum):
@@ -81,10 +89,48 @@ class Node(BaseModel):
 
     _computed: COMPUTED = PrivateAttr(default=dict())
 
+    _cache: "Cache" = PrivateAttr(default_factory=Cache)
+
+    _used_resolver: "Resolver" = PrivateAttr(None)  # type: ignore
+
     @property
     def computed(self) -> COMPUTED:
         return self._computed
 
+    async def resolve(
+        self,
+        *,
+        edge_name: str,
+        edge_resolver: "Resolver",
+        cache_only: bool = True,
+        client: edgedb.AsyncIOClient | None = None,
+    ) -> T.Any:
+        val = self._cache.val_or_unset(edge=edge_name, resolver=edge_resolver)
+        if val is UNSET:
+            if cache_only:
+                raise NodeException(
+                    f"Could not get {edge_name} from the cache, and settings are cache_only."
+                )
+            else:
+                new_r = self._used_resolver.__class__()
+                # UserResolver().friends(edge_resolver)
+                getattr(new_r, edge_name)(edge_resolver)
+                this_node = await new_r._gerror(
+                    field_name="id", value=self.id, client=client
+                )
+                new_val = await getattr(this_node, edge_name)(edge_resolver)
+                self._cache.add(edge=edge_name, resolver=edge_resolver, val=new_val)
+                return new_val
+        return val
+
+    """
+    # TODO time the diff between initing it vs this property method
+    @property
+    def _cache(self) -> "Cache":
+        if not self.__cache:
+            self.__cache = Cache()
+        return self.__cache
+    """
     """
     @classproperty
     def Insert(self) -> T.Type[Insert]:  # example of how this could work

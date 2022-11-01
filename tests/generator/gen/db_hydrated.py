@@ -27,6 +27,7 @@ FilterConnector = resolver_enums.FilterConnector
 from . import db_enums as enums
 
 CLIENT = create_async_client(dsn=os.environ["EDGEDB_DSN"])
+CACHE_ONLY: bool = True
 from pydantic import EmailStr
 
 
@@ -46,6 +47,9 @@ class User(Node):
     email_: T.Union[T.Optional[EmailStr], UnsetType] = Field(UNSET, alias="email")
     names_of_friends_: T.Union[T.Optional[T.Set[str]], UnsetType] = Field(
         UNSET, alias="names_of_friends"
+    )
+    ids_of_friends_: T.Union[T.Optional[T.Set[UUID]], UnsetType] = Field(
+        UNSET, alias="ids_of_friends"
     )
 
     @property
@@ -90,6 +94,41 @@ class User(Node):
             raise errors.ComputedPropertyException("names_of_friends is unset")
         return self.names_of_friends_  # type: ignore
 
+    @property
+    def ids_of_friends(self) -> T.Optional[T.Set[UUID]]:
+        # if self.ids_of_friends_ is UNSET:
+        if "ids_of_friends_" not in self.__fields_set__:
+            raise errors.ComputedPropertyException("ids_of_friends is unset")
+        return self.ids_of_friends_  # type: ignore
+
+    async def friends(
+        self,
+        resolver: UserResolver = None,
+        cache_only: bool = CACHE_ONLY,
+        client: AsyncIOClient | None = None,
+    ) -> T.Optional[T.List[User]]:
+        return await self.resolve(
+            edge_name="friends",
+            edge_resolver=resolver or UserResolver(),
+            cache_only=cache_only,
+            client=client,
+        )
+
+    async def friends__count(
+        self,
+        resolver: UserResolver = None,
+        refresh: bool = False,
+        revert_to_first: bool = False,
+    ) -> int:
+        rez = resolver or UserResolver()
+        rez.is_count = True
+        return await self.resolve(
+            edge_name="friends__count",
+            edge_resolver=rez,
+            refresh=refresh,
+            revert_to_first=revert_to_first,
+        )
+
     EdgeConfig: T.ClassVar[EdgeConfigBase] = EdgeConfigBase(
         model_name="User",
         client=CLIENT,
@@ -111,7 +150,7 @@ class User(Node):
             "last_updated_at",
             "user_role",
         },
-        computed_properties={"names_of_friends"},
+        computed_properties={"ids_of_friends", "names_of_friends"},
         basemodel_properties={"email"},
         custom_annotations=set(),
         mutate_on_update={"last_updated_at": "datetime_current()"},
@@ -172,6 +211,12 @@ class User(Node):
             ),
             "names_of_friends": FieldInfo(
                 cast="std::str",
+                cardinality=Cardinality.Many,
+                readonly=False,
+                required=False,
+            ),
+            "ids_of_friends": FieldInfo(
+                cast="std::uuid",
                 cardinality=Cardinality.Many,
                 readonly=False,
                 required=False,
@@ -401,6 +446,7 @@ class UserResolver(Resolver[User, UserInsert, UserPatch]):
         created_at: T.Optional[T.Any] = None,
         email: T.Optional[T.Any] = None,
         id: T.Optional[T.Any] = None,
+        ids_of_friends: T.Optional[T.Any] = None,
         images: T.Optional[T.Any] = None,
         last_updated_at: T.Optional[T.Any] = None,
         name: T.Optional[T.Any] = None,
@@ -415,6 +461,7 @@ class UserResolver(Resolver[User, UserInsert, UserPatch]):
                 "created_at": created_at,
                 "email": email,
                 "id": id,
+                "ids_of_friends": ids_of_friends,
                 "images": images,
                 "last_updated_at": last_updated_at,
                 "name": name,
@@ -431,6 +478,7 @@ class UserResolver(Resolver[User, UserInsert, UserPatch]):
         created_at: T.Optional[T.List[T.Any]] = None,
         email: T.Optional[T.List[T.Any]] = None,
         id: T.Optional[T.List[T.Any]] = None,
+        ids_of_friends: T.Optional[T.List[T.Any]] = None,
         images: T.Optional[T.List[T.Any]] = None,
         last_updated_at: T.Optional[T.List[T.Any]] = None,
         name: T.Optional[T.List[T.Any]] = None,
@@ -445,6 +493,7 @@ class UserResolver(Resolver[User, UserInsert, UserPatch]):
                 "created_at": created_at,
                 "email": email,
                 "id": id,
+                "ids_of_friends": ids_of_friends,
                 "images": images,
                 "last_updated_at": last_updated_at,
                 "name": name,
@@ -459,6 +508,7 @@ class UserResolver(Resolver[User, UserInsert, UserPatch]):
         *,
         created_at: bool = False,
         email: bool = False,
+        ids_of_friends: bool = False,
         images: bool = False,
         last_updated_at: bool = False,
         names_of_friends: bool = False,
@@ -469,6 +519,8 @@ class UserResolver(Resolver[User, UserInsert, UserPatch]):
             fields_to_include.add("created_at")
         if email is True:
             fields_to_include.add("email")
+        if ids_of_friends is True:
+            fields_to_include.add("ids_of_friends")
         if images is True:
             fields_to_include.add("images")
         if last_updated_at is True:
@@ -642,6 +694,9 @@ class DateModelResolver(Resolver[DateModel, DateModelInsert, DateModelPatch]):
 
 UserInsert.update_forward_refs()
 DateModelInsert.update_forward_refs()
+
+UserPatch.update_forward_refs()
+DateModelPatch.update_forward_refs()
 
 User.update_forward_refs()
 DateModel.update_forward_refs()

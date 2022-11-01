@@ -44,6 +44,7 @@ class DBConfig(BaseModel):
     copy_config: str | None = None
     hydrate: bool = False
     nodes: T.Dict[str, NodeConfig] = dict()
+    cache_only: bool = True
 
     @property
     def is_plaintext_dsn(self) -> bool:
@@ -129,14 +130,14 @@ def build_node_link_function_str(link: Link) -> str:
 async def {link.name}(
     self,
     resolver: {link_resolver_name} = None,
-    refresh: bool = False,
-    revert_to_first: bool = False,
-) -> {link.type_str}:
+    cache_only: bool = CACHE_ONLY,
+    client: AsyncIOClient | None = None,
+) -> {link.type_str.replace("enums.", "")}:
     return await self.resolve(
         edge_name="{link.name}",
         edge_resolver=resolver or {link_resolver_name}(),
-        refresh=refresh,
-        revert_to_first=revert_to_first,
+        cache_only=cache_only,
+        client=client,
     )
 
 async def {link.name}__count(
@@ -680,7 +681,7 @@ def {prop.name}(self) -> {type_str}:
         # appendix_properties_str,
         # basemodel_properties_str,
         # custom_annotations_str,
-        # node_link_functions_str,
+        node_link_functions_str,
         orm_config_str,
     ]
     node_inner_str = "\n".join(remove_falsies(node_inner_strs))
@@ -758,12 +759,15 @@ async def build_nodes_and_resolvers(
     update_forward_refs_inserts_str = "\n".join(
         [f"{o.node_name}Insert.update_forward_refs()" for o in object_types]
     )
+    update_forward_refs_patches_str = "\n".join(
+        [f"{o.node_name}Patch.update_forward_refs()" for o in object_types]
+    )
     update_forward_refs_nodes_str = "\n".join(
         [f"{o.node_name}.update_forward_refs()" for o in object_types]
     )
     nodes_str = "\n".join(node_strs)
     edge_resolver_map_str = "\n".join(edge_resolver_map_strs)
-    return f"{nodes_str}\n\n{update_forward_refs_inserts_str}\n\n{update_forward_refs_nodes_str}\n\n{edge_resolver_map_str}"
+    return f"{nodes_str}\n\n{update_forward_refs_inserts_str}\n\n{update_forward_refs_patches_str}\n\n{update_forward_refs_nodes_str}\n\n{edge_resolver_map_str}"
 
 
 def add_quotes_to_non_env_vars(s: str) -> str:
@@ -829,6 +833,7 @@ async def build_from_config(
     client = edgedb.create_async_client(dsn=db_config.dsn)
     imports_str = imports(enums_module=enums_module)
     client_str = build_client(db_config)
+    cache_only_str = f"CACHE_ONLY: bool = {db_config.cache_only}"
     validator_module_imports = build_validator_module_imports(db_config)
     hydrate_imports = "" if not hydrate else build_hydrate_imports(db_config)
     nodes_and_resolvers_str = await build_nodes_and_resolvers(
@@ -842,6 +847,7 @@ async def build_from_config(
         [
             imports_str,
             client_str,
+            cache_only_str,
             validator_module_imports,
             hydrate_imports,
             nodes_and_resolvers_str,

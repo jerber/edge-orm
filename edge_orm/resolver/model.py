@@ -81,6 +81,22 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
 
     """RESOLVER BUILDING METHODS"""
 
+    def set_update_operation(
+        self: ThisResolverType,
+        replace: bool = False,
+        add: bool = False,
+        remove: bool = False,
+    ) -> ThisResolverType:
+        if replace:
+            self.update_operation = enums.UpdateOperation.REPLACE
+        elif add:
+            self.update_operation = enums.UpdateOperation.ADD
+        elif remove:
+            self.update_operation = enums.UpdateOperation.REMOVE
+        else:
+            raise errors.ResolverException("Invalid update operation given.")
+        return self
+
     def add_query_variables(self, variables: VARS | None) -> None:
         """
 
@@ -129,6 +145,10 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
             self._filter = filter_str
         return self
 
+    def filter_str_from_field_name(self, field_name: str) -> str:
+        cast = self._node_config.node_edgedb_conversion_map[field_name].cast
+        return f".{field_name} = <{cast}>${field_name}"
+
     def _filter_by(
         self: ThisResolverType,
         connector: enums.FilterConnector = enums.FilterConnector.AND,
@@ -142,9 +162,8 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         variables = {}
         for field_name, field_value in kwargs.items():
             cast = conversion_map[field_name].cast
-            variable_name = field_name
-            filter_strs.append(f".{field_name} = <{cast}>${variable_name}")
-            variables[variable_name] = field_value
+            filter_strs.append(f".{field_name} = <{cast}>${field_name}")
+            variables[field_name] = field_value
         filter_str = " AND ".join(filter_strs)
         return self.filter(
             filter_str=filter_str, variables=variables, connector=connector
@@ -338,6 +357,8 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         )
 
     def is_subset_of(self, other: "Resolver") -> bool:  # type: ignore
+        if self is other:
+            return True
         if self._fields_to_return:
             self_additional_fields_to_return = (
                 self._fields_to_return - other._fields_to_return
@@ -434,15 +455,16 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         self.validate_field_name_value_filters(
             operation_name="get", field_name=field_name, value=value
         )
-        self._filter_by(**{field_name: value})
         query_str, variables = self.full_query_str_and_vars(
             include_select=True, prefix=""
         )
+        custom_filter_str = f"FILTER {self.filter_str_from_field_name(field_name)}"
+        query_str += f" {custom_filter_str}"
         with span.span(op=f"edgedb.get.{self.model_name}", description=query_str[:200]):
             raw_response = await execute.query(
                 client=client or self._node_config.client,
                 query_str=query_str,
-                variables=variables,
+                variables={**variables, field_name: value},
                 only_one=True,
             )
 
@@ -637,6 +659,8 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         self,
         patch: PatchType,
         *,
+        field_name: str = None,
+        value: T.Any = None,
         only_one: bool,
         mutate_on_update: bool,
         client: edgedb.AsyncIOClient | None,
@@ -649,6 +673,16 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
             ),
         )
         filters_s, filters_vars = self.build_filters_str_and_vars(prefix="")
+
+        if only_one:
+            if field_name is None:
+                raise errors.ResolverException(
+                    "Cannot be only_one and have no field_name."
+                )
+            custom_filter_str = f"FILTER {self.filter_str_from_field_name(field_name)}"
+            filters_s += f" {custom_filter_str}"
+            filters_vars[field_name] = value
+
         update_s = f"UPDATE {self.model_name} {filters_s} SET {update_s}"
         select_s, select_variables = self.full_query_str_and_vars(
             prefix="",
@@ -695,9 +729,13 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         self.validate_field_name_value_filters(
             operation_name="update_one", field_name=field_name, value=value
         )
-        self._filter_by(**{field_name: value})
         raw_response = await self._update(
-            patch=patch, only_one=True, client=client, mutate_on_update=mutate_on_update
+            patch=patch,
+            field_name=field_name,
+            value=value,
+            only_one=True,
+            client=client,
+            mutate_on_update=mutate_on_update,
         )
         raw_response = T.cast(RAW_RESP_ONE, raw_response)
         if not raw_response:
@@ -730,9 +768,24 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         return self.parse_obj_with_cache_list(raw_response)
 
     async def _delete(
-        self, only_one: bool, client: edgedb.AsyncIOClient | None
+        self,
+        *,
+        field_name: str = None,
+        value: T.Any = None,
+        only_one: bool,
+        client: edgedb.AsyncIOClient | None,
     ) -> RAW_RESPONSE:
         filters_s, filters_vars = self.build_filters_str_and_vars(prefix="")
+
+        if only_one:
+            if field_name is None:
+                raise errors.ResolverException(
+                    "Cannot be only_one and have no field_name."
+                )
+            custom_filter_str = f"FILTER {self.filter_str_from_field_name(field_name)}"
+            filters_s += f" {custom_filter_str}"
+            filters_vars[field_name] = value
+
         delete_s = f"DELETE {self.model_name} {filters_s}"
         select_s, select_variables = self.full_query_str_and_vars(
             prefix="",
@@ -761,8 +814,9 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         self.validate_field_name_value_filters(
             operation_name="delete one", field_name=field_name, value=value
         )
-        self._filter_by(**{field_name: value})
-        raw_response = await self._delete(only_one=True, client=client)
+        raw_response = await self._delete(
+            field_name=field_name, value=value, only_one=True, client=client
+        )
         raw_response = T.cast(RAW_RESP_ONE, raw_response)
         if not raw_response:
             raise errors.ResolverException("No object to delete.")
@@ -784,16 +838,6 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         raw_response = T.cast(RAW_RESP_MANY, raw_response)
         return self.parse_obj_with_cache_list(raw_response)
 
-    """PARSING"""
-
-    def parse_obj_with_cache(self, d: RAW_RESP_ONE) -> NodeType:
-        with span.span(op=f"parse.{self.model_name}"):
-            return self._node_cls(**d)
-
-    def parse_obj_with_cache_list(self, lst: RAW_RESP_MANY) -> list[NodeType]:
-        with span.span(op=f"parse_list.{self.model_name}", description=f"{len(lst)}"):
-            return [self.parse_obj_with_cache(d) for d in lst]
-
     """HELPERS"""
 
     def has_filters(self) -> T.Optional[str]:
@@ -808,3 +852,38 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
             if field in self._patch_cls.__fields__:
                 setattr(patch, field, getattr(insert, field))
         return patch
+
+    """PARSING"""
+
+    def _parse_obj_with_cache(self, d: RAW_RESP_ONE) -> NodeType:
+        # TODO counts will fail, catch counts early
+        node = self._node_cls(**d)
+        # TODO speed test
+        fields_set = {re.sub(r"_$", "", s) for s in node.__fields_set__}
+        other_fields = d.keys() - fields_set
+        for field_name in sorted(other_fields):
+            resolver = self._nested_resolvers.resolver_from_field_name(field_name)
+            if not resolver:
+                # must be an extra field
+                node.computed[field_name] = d[field_name]
+            else:
+                child = d[field_name]
+                if child:
+                    if isinstance(child, list):
+                        val = resolver.parse_obj_with_cache_list(child)
+                    else:
+                        val = resolver.parse_obj_with_cache(child)
+                else:
+                    val = child
+                edge_name = field_name.split(helpers.SEPARATOR)[0]
+                node._cache.add(edge=edge_name, resolver=resolver, val=val)
+        node._used_resolver = self
+        return node
+
+    def parse_obj_with_cache(self, d: RAW_RESP_ONE) -> NodeType:
+        with span.span(op=f"parse.{self.model_name}"):
+            return self._parse_obj_with_cache(d)
+
+    def parse_obj_with_cache_list(self, lst: RAW_RESP_MANY) -> list[NodeType]:
+        with span.span(op=f"parse_list.{self.model_name}", description=f"{len(lst)}"):
+            return [self.parse_obj_with_cache(d) for d in lst]

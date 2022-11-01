@@ -15,6 +15,7 @@ from devtools import debug
 import tests
 from faker import Faker
 from devtools import debug
+import time
 
 fake = Faker()
 
@@ -79,7 +80,13 @@ async def test_insert_with_conflict() -> None:
     # now links
     phone_number = "945-632-7731"
     insert = build_insert(phone_number=phone_number)
-    rez = db.UserResolver().include_appendix_properties().include_computed_properties()
+    rez = (
+        db.UserResolver()
+        .include_appendix_properties()
+        .include_computed_properties()
+        .friends()
+        .extra_field("friend_ids", ".friends.id", conversion_func=UUID)
+    )
     with pytest.raises(ExecuteConstraintViolationException):
         new_user = await rez.insert_one(insert)
     new_user = await rez.insert_one(
@@ -104,3 +111,30 @@ async def test_insert_with_conflict() -> None:
     assert custom_returned.last_updated_at < datetime.now(
         tz=ZoneInfo("America/New_York")
     ) - timedelta(minutes=10)
+
+    print("CCC", user_returned._cache)
+
+
+@pytest.mark.asyncio
+async def test_caching():
+    rez = (
+        db.UserResolver()
+        .include_appendix_properties()
+        .include_computed_properties()
+        .friends(db.UserResolver().include(names_of_friends=True, ids_of_friends=True))
+        .extra_field("friend_ids", ".friends.id", conversion_func=UUID)
+    )
+
+    user = await rez.copy().gerror(phone_number="+16666666666")
+
+    debug(user.computed)
+    assert len(user.computed["friend_ids"]) > 1
+    debug(user)
+    debug(user._cache)
+    start = time.time()
+    friends = await user.friends(db.UserResolver().include(names_of_friends=True))
+    assert time.time() - start < 0.01
+    debug(friends)
+
+    users = await rez.query()
+    debug(users)

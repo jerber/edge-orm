@@ -13,7 +13,9 @@ from devtools import debug
 @pytest.mark.asyncio
 async def test_update_one() -> None:
     age = random.randint(1, 110)
-    patch = db.UserPatch(age=age, friends=db.UserResolver().limit(2))
+    patch = db.UserPatch(
+        age=age, friends=db.UserResolver().limit(2).set_update_operation(add=True)
+    )
     updated_user = await db.UserResolver().update_one(
         patch=patch, phone_number="+16666666666"
     )

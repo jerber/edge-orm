@@ -106,3 +106,16 @@ class NestedResolvers(BaseModel):
         s = ", ".join(edge_strs)
         flattened_d = {k: v for d in vars_lst for k, v in d.items()}
         return s, flattened_d
+
+    def resolver_from_field_name(self, field_name: str) -> ResolverType | None:
+        possible_edge = field_name.split(helpers.SEPARATOR)[0]
+        resolvers: list[ResolverType] = self.get(possible_edge)
+        if not resolvers:
+            return None
+        if helpers.SEPARATOR not in field_name:
+            return resolvers[0]
+        try:
+            index = int(field_name.split(helpers.SEPARATOR)[1])
+            return resolvers[index]
+        except (IndexError, ValueError):
+            return None
