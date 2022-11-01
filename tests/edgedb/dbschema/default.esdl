@@ -23,6 +23,7 @@ module default {
         }
 
         property names_of_friends := .friends.name;
+        property ids_of_friends := .friends.id;
 
         property user_role -> UserRole;
 
