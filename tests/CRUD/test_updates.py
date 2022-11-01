@@ -36,6 +36,6 @@ async def test_update_many() -> None:
     # updates all ages
     # updated_users = await db.UserResolver().update_many(patch=patch, update_all=True)
     updated_users = (
-        await db.UserResolver().filter_by(name="Juana").update_many(patch=patch)
+        await db.UserResolver().filter_by(name="Jon Pon").update_many(patch=patch)
     )
     debug(updated_users)

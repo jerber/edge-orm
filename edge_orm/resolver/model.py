@@ -415,7 +415,6 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
     async def query(
         self, client: edgedb.AsyncIOClient | None = None
     ) -> T.List[NodeType]:
-        # TODO merge
         query_str, variables = self.full_query_str_and_vars(
             include_select=True, prefix=""
         )
@@ -454,7 +453,6 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         *,
         client: edgedb.AsyncIOClient | None = None,
     ) -> NodeType | None:
-        # TODO merge
         self.validate_field_name_value_filters(
             operation_name="get", field_name=field_name, value=value
         )
@@ -549,10 +547,9 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         client: edgedb.AsyncIOClient | None = None,
         upsert_given_conflict_on: str = None,
         custom_conflict_on_str: str = None,
-        return_model_for_conflict_on: str = False,
+        return_model_for_conflict_on: str = None,
         mutate_on_update: bool = True,
     ) -> NodeType:
-        # TODO merge resolver
         if existing_filter_str := self.has_filters():
             raise errors.ResolverException(
                 f"This resolver already has filters: {existing_filter_str}. "
@@ -873,9 +870,9 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
                 child = d[field_name]
                 if child:
                     if isinstance(child, list):
-                        val = resolver.parse_obj_with_cache_list(child)
+                        val = [self._parse_obj_with_cache(d) for d in child]
                     else:
-                        val = resolver.parse_obj_with_cache(child)
+                        val = resolver._parse_obj_with_cache(child)
                 else:
                     val = child
                 edge_name = field_name.split(helpers.SEPARATOR)[0]
@@ -889,7 +886,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
 
     def parse_obj_with_cache_list(self, lst: RAW_RESP_MANY) -> list[NodeType]:
         with span.span(op=f"parse_list.{self.model_name}", description=f"{len(lst)}"):
-            return [self.parse_obj_with_cache(d) for d in lst]
+            return [self._parse_obj_with_cache(d) for d in lst]
 
     """merge"""
 
