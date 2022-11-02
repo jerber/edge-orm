@@ -1,5 +1,55 @@
 # yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
 
 site_name: EdgeORM
+site_description: A simple, fast, and powerful ORM for Python and EdgeDB.
+site_url: https://jerber.github.io/edgeorm/
 theme:
   name: material
+  palette:
+    - scheme: default
+      primary: teal
+      accent: amber
+repo_name: jerber/edge-orm
+repo_url: https://github.com/jerber/edge-orm
+
+# this is what https://squidfunk.github.io/mkdocs-material/reference/code-blocks/#configuration told me
+# markdown_extensions:
+#   - pymdownx.highlight:
+#       anchor_linenums: true
+#   - pymdownx.inlinehilite
+#   - pymdownx.snippets
+#   - pymdownx.superfences
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - markdown.extensions.codehilite:
+      guess_lang: false
+  - admonition
+  - codehilite
+  - extra
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format ""
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra:
+  # analytics:
+  # provider: google
+  # property: UA-205713594-2
+  social:
+    - icon: fontawesome/brands/github-alt
+      link: https://github.com/jerber/edge-orm
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/jerber888
+  # - icon: fontawesome/brands/linkedin
+  # link: https://www.linkedin.com/in/tiangolo
+  # - icon: fontawesome/brands/dev
+  # link: https://dev.to/tiangolo
+  # - icon: fontawesome/brands/medium
+  # link: https://medium.com/@tiangolo
+  # - icon: fontawesome/solid/globe
+  # link: https://tiangolo.com
