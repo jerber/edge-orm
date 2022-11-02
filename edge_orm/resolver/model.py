@@ -872,7 +872,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
                 child = d[field_name]
                 if child:
                     if isinstance(child, list):
-                        val = [self._parse_obj_with_cache(d) for d in child]
+                        val = [resolver._parse_obj_with_cache(d) for d in child]
                     else:
                         val = resolver._parse_obj_with_cache(child)
                 else:
