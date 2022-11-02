@@ -6,6 +6,7 @@ from edge_orm.types_generator import (
     generate,
     NodeConfig,
     PropertyConfig,
+    PropertyCardinality,
 )
 
 import tests
@@ -29,7 +30,13 @@ db_config_map: dict[str, DBConfig] = {
                         module_name="EmailStr",
                         module_path="pydantic",
                         validate_as_basemodel=False,
-                    )
+                    ),
+                    "images": PropertyConfig(
+                        module_name="Image",
+                        module_path="tests.models",
+                        # cardinality=PropertyCardinality.MANY,
+                        validate_as_basemodel=True,
+                    ),
                 },
                 mutate_on_update={"last_updated_at": "datetime_current()"},
             )

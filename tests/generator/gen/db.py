@@ -29,6 +29,7 @@ from . import db_enums as enums
 CLIENT = create_async_client(dsn=os.environ["EDGEDB_DSN"])
 CACHE_ONLY: bool = True
 from pydantic import EmailStr
+from tests.models import Image
 
 
 class User(Node):
@@ -43,7 +44,9 @@ class User(Node):
     user_role_: T.Union[T.Optional[enums.UserRole], UnsetType] = Field(
         UNSET, alias="user_role"
     )
-    images_: T.Union[T.Optional[T.List[str]], UnsetType] = Field(UNSET, alias="images")
+    images_: T.Union[T.Optional[T.List[Image]], UnsetType] = Field(
+        UNSET, alias="images"
+    )
     email_: T.Union[T.Optional[EmailStr], UnsetType] = Field(UNSET, alias="email")
     names_of_friends_: T.Union[T.Optional[T.Set[str]], UnsetType] = Field(
         UNSET, alias="names_of_friends"
@@ -51,6 +54,8 @@ class User(Node):
     ids_of_friends_: T.Union[T.Optional[T.Set[UUID]], UnsetType] = Field(
         UNSET, alias="ids_of_friends"
     )
+
+    _from_str = validator("images_", pre=True, allow_reuse=True)(validators.from_str)
 
     @property
     def last_updated_at(self) -> datetime:
@@ -74,7 +79,7 @@ class User(Node):
         return self.user_role_  # type: ignore
 
     @property
-    def images(self) -> T.Optional[T.List[str]]:
+    def images(self) -> T.Optional[T.List[Image]]:
         # if self.images_ is UNSET:
         if "images_" not in self.__fields_set__:
             raise errors.AppendixPropertyException("images is unset")
@@ -123,7 +128,7 @@ class User(Node):
             "user_role",
         },
         computed_properties={"ids_of_friends", "names_of_friends"},
-        basemodel_properties={"email"},
+        basemodel_properties={"email", "images"},
         custom_annotations=set(),
         mutate_on_update={"last_updated_at": "datetime_current()"},
         node_edgedb_conversion_map={
@@ -313,7 +318,7 @@ class UserInsert(Insert):
     name: str
     age: T.Union[int, None, UnsetType] = Field(UNSET)
     user_role: T.Union[enums.UserRole, None, UnsetType] = Field(UNSET)
-    images: T.Union[T.List[str], None, UnsetType] = Field(UNSET)
+    images: T.Union[T.List[Image], None, UnsetType] = Field(UNSET)
     email: T.Union[EmailStr, None, UnsetType] = Field(UNSET)
     friends: T.Optional[UserResolver] = None
 
@@ -324,7 +329,7 @@ class UserPatch(Patch):
     name: T.Union[str, UnsetType] = Field(UNSET)
     age: T.Union[T.Optional[int], UnsetType] = Field(UNSET)
     user_role: T.Union[T.Optional[enums.UserRole], UnsetType] = Field(UNSET)
-    images: T.Union[T.Optional[T.List[str]], UnsetType] = Field(UNSET)
+    images: T.Union[T.Optional[T.List[Image]], UnsetType] = Field(UNSET)
     email: T.Union[T.Optional[EmailStr], UnsetType] = Field(UNSET)
     friends: T.Union[T.Optional[UserResolver], UnsetType] = Field(
         default_factory=UnsetType

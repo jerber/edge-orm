@@ -396,7 +396,7 @@ def build_from_str_validator_str(node_config: NodeConfig | None) -> str:
     if not field_name_strs:
         return ""
     return f"""
-_from_str = validator({", ".join(field_name_strs)}, pre=True, allow_reuse=True)(from_str)
+_from_str = validator({", ".join(field_name_strs)}, pre=True, allow_reuse=True)(validators.from_str)
     """
 
 
