@@ -677,3 +677,8 @@ DateModelPatch.update_forward_refs()
 
 User.update_forward_refs()
 DateModel.update_forward_refs()
+
+UserResolver._edge_resolver_map: T.Dict[str, T.Union[T.Type[UserResolver]]] = {
+    "friends": UserResolver
+}
+DateModelResolver._edge_resolver_map: T.Dict[str, T.Type[Resolver]] = {}

@@ -122,16 +122,16 @@ class User(Node):
     async def friends__count(
         self,
         resolver: UserResolver = None,
-        refresh: bool = False,
-        revert_to_first: bool = False,
+        cache_only: bool = CACHE_ONLY,
+        client: AsyncIOClient | None = None,
     ) -> int:
         rez = resolver or UserResolver()
         rez.is_count = True
         return await self.resolve(
             edge_name="friends__count",
             edge_resolver=rez,
-            refresh=refresh,
-            revert_to_first=revert_to_first,
+            cache_only=cache_only,
+            client=client,
         )
 
     EdgeConfig: T.ClassVar[EdgeConfigBase] = EdgeConfigBase(
@@ -705,3 +705,8 @@ DateModelPatch.update_forward_refs()
 
 User.update_forward_refs()
 DateModel.update_forward_refs()
+
+UserResolver._edge_resolver_map: T.Dict[str, T.Union[T.Type[UserResolver]]] = {
+    "friends": UserResolver
+}
+DateModelResolver._edge_resolver_map: T.Dict[str, T.Type[Resolver]] = {}

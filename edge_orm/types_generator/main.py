@@ -143,16 +143,16 @@ async def {link.name}(
 async def {link.name}__count(
     self,
     resolver: {link_resolver_name} = None,
-    refresh: bool = False,
-    revert_to_first: bool = False,
+    cache_only: bool = CACHE_ONLY,
+    client: AsyncIOClient | None = None
 ) -> int:
     rez = resolver or {link_resolver_name}()
     rez.is_count = True
     return await self.resolve(
         edge_name="{link.name}__count",
         edge_resolver=rez,
-        refresh=refresh,
-        revert_to_first=revert_to_first,
+        cache_only=cache_only,
+        client=client,
     )
     """
 
@@ -713,17 +713,17 @@ def {prop.name}(self) -> {type_str}:
     edge_resolver_val_strs = [
         f"T.Type[{v}]" for v in sorted(set(edge_resolver_map.values()))
     ]
-    """
+
     union_type = (
         f"T.Union[{', '.join(edge_resolver_val_strs)}]"
         if edge_resolver_map
-        else "EdgeResolverType"
+        else "T.Type[Resolver]"
     )
     edge_resolver_map_strs.append(
         f"{node_resolver_name}._edge_resolver_map: T.Dict[str, {union_type}] ="
         f" {stringify_dict(edge_resolver_map, stringify_value=False)}"
     )
-    """
+
     resolver_inner_strs = [
         resolver_properties_str,
         resolver_link_functions_str,

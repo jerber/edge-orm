@@ -64,6 +64,8 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
     update_operation: enums.UpdateOperation | None = None
     _merged: bool = PrivateAttr(False)
 
+    _edge_resolver_map: T.ClassVar[dict[str, T.Type["Resolver"]]]  # type: ignore
+
     def __init__(self, **data: T.Any) -> None:
         super().__init__(**data)
         if not self._fields_to_return:
