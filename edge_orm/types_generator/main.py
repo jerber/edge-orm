@@ -45,6 +45,7 @@ class DBConfig(BaseModel):
     hydrate: bool = False
     nodes: T.Dict[str, NodeConfig] = dict()
     cache_only: bool = True
+    resolver_mixin_path: str | None = None
 
     @property
     def is_plaintext_dsn(self) -> bool:
@@ -76,7 +77,7 @@ def indent_lines(s: str, indent: str = DEFAULT_INDENT) -> str:
     return indent + f"\n{indent}".join(chunks)
 
 
-def imports(enums_module: str) -> str:
+def imports(enums_module: str, resolver_mixin_path: str | None) -> str:
     lines = [
         "from __future__ import annotations",
         "import os",
@@ -92,6 +93,8 @@ def imports(enums_module: str) -> str:
         "FilterConnector = resolver_enums.FilterConnector",
         f"from . import {enums_module} as enums",
     ]
+    if resolver_mixin_path:
+        lines.append(resolver_mixin_path)
     return "\n".join(lines)
 
 
@@ -414,6 +417,7 @@ def build_node_and_resolver(
     hydrate: bool,
     dehydrate: bool,
     allow_inserting_id: bool = True,
+    resolver_mixin_model: str | None = None,
 ) -> str:
     # need to sort props and links by required, exclusive, no default, rest
     object_type.properties.sort(
@@ -732,7 +736,8 @@ def {prop.name}(self) -> {type_str}:
         resolver_include_fields_str,
     ]
     resolver_inner_str = "\n".join(resolver_inner_strs)
-    resolver_s = f"class {node_resolver_name}(Resolver[{object_type.node_name}, {insert_model_name}, {patch_model_name}]):\n{indent_lines(resolver_inner_str)}"
+    resolver_mixin_str = "" if not resolver_mixin_model else f", {resolver_mixin_model}"
+    resolver_s = f"class {node_resolver_name}(Resolver[{object_type.node_name}, {insert_model_name}, {patch_model_name}]{resolver_mixin_str}):\n{indent_lines(resolver_inner_str)}"
 
     return f"{node_s}\n{insert_s}\n{patch_s}\n{resolver_s}"
 
@@ -746,6 +751,11 @@ async def build_nodes_and_resolvers(
     object_types = await introspect_objects(client)
     node_strs: T.List[str] = []
     edge_resolver_map_strs: T.List[str] = []
+    resolver_mixin_model = (
+        None
+        if not db_config.resolver_mixin_path
+        else db_config.resolver_mixin_path.split(" ")[-1]
+    )
     for object_type in object_types:
         node_strs.append(
             build_node_and_resolver(
@@ -754,6 +764,7 @@ async def build_nodes_and_resolvers(
                 edge_resolver_map_strs=edge_resolver_map_strs,
                 hydrate=object_type.node_name in nodes_to_hydrate and not dehydrate,
                 dehydrate=dehydrate,
+                resolver_mixin_model=resolver_mixin_model,
             )
         )
     update_forward_refs_inserts_str = "\n".join(
@@ -831,7 +842,9 @@ async def build_from_config(
     dehydrate: bool = False,
 ) -> str:
     client = edgedb.create_async_client(dsn=db_config.dsn)
-    imports_str = imports(enums_module=enums_module)
+    imports_str = imports(
+        enums_module=enums_module, resolver_mixin_path=db_config.resolver_mixin_path
+    )
     client_str = build_client(db_config)
     cache_only_str = f"CACHE_ONLY: bool = {db_config.cache_only}"
     validator_module_imports = build_validator_module_imports(db_config)

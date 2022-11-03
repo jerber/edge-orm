@@ -16,6 +16,7 @@ db_config_map: dict[str, DBConfig] = {
         vendor=DBVendor.edgedb,
         dsn="EDGEDB_DSN",
         hydrate=True,
+        resolver_mixin_path="from tests.models.mixin import ResolverMixin",
         nodes={
             "User": NodeConfig(
                 appendix_properties=[

@@ -25,6 +25,7 @@ from edge_orm import (
 
 FilterConnector = resolver_enums.FilterConnector
 from . import db_enums as enums
+from tests.models.mixin import ResolverMixin
 
 CLIENT = create_async_client(dsn=os.environ["EDGEDB_DSN"])
 CACHE_ONLY: bool = True
@@ -364,7 +365,7 @@ class UserPatch(Patch):
     )
 
 
-class UserResolver(Resolver[User, UserInsert, UserPatch]):
+class UserResolver(Resolver[User, UserInsert, UserPatch], ResolverMixin):
     _node_cls = User
     _insert_cls = UserInsert
     _patch_cls = UserPatch
@@ -621,7 +622,9 @@ class DateModelPatch(Patch):
     last_updated_at: T.Union[T.Optional[datetime], UnsetType] = Field(UNSET)
 
 
-class DateModelResolver(Resolver[DateModel, DateModelInsert, DateModelPatch]):
+class DateModelResolver(
+    Resolver[DateModel, DateModelInsert, DateModelPatch], ResolverMixin
+):
     _node_cls = DateModel
     _insert_cls = DateModelInsert
     _patch_cls = DateModelPatch
