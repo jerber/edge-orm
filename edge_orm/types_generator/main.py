@@ -13,7 +13,12 @@ from .introspection import (
     Link,
     Property,
 )
-from edge_orm.node.models import CONVERSION_MAP, PropertyCardinality, FieldInfo
+from edge_orm.node.models import (
+    CONVERSION_MAP,
+    PropertyCardinality,
+    FieldInfo,
+    Cardinality,
+)
 
 ENV_VAR_PATTERN = r"[A-Z_]+"
 COUNT_POSTFIX = "_Count"
@@ -130,7 +135,7 @@ async def build_enums(client: edgedb.AsyncIOClient, include_strawberry: bool) ->
 
 def build_node_link_function_str(link: Link) -> str:
     link_resolver_name = f"{link.target.model_name}Resolver"
-    return f"""
+    normal = f"""
 async def {link.name}(
     self,
     resolver: {link_resolver_name} = None,
@@ -143,7 +148,8 @@ async def {link.name}(
         cache_only=cache_only,
         client=client,
     )
-
+"""
+    count = f"""
 async def {link.name}{COUNT_POSTFIX}(
     self,
     resolver: {link_resolver_name} = None,
@@ -159,15 +165,20 @@ async def {link.name}{COUNT_POSTFIX}(
         client=client,
     )
     """
+    s = normal
+    if link.cardinality == Cardinality.Many:
+        s += f"\n{count}"
+    return s
 
 
 def build_resolver_link_function_str(node_resolver_name: str, link: Link) -> str:
     link_resolver_name = f"{link.target.model_name}Resolver"
-    return f"""
+    normal = f"""
 def {link.name}(self, _: T.Optional[{link_resolver_name}] = None, /, make_first: bool = False) -> {node_resolver_name}:
     self._nested_resolvers.add("{link.name}", _ or {link_resolver_name}(), make_first=make_first)
     return self
-
+    """
+    count = f"""
 def {link.name}{COUNT_POSTFIX}(self, _: T.Optional[{link_resolver_name}] = None, /, make_first: bool = False) -> {node_resolver_name}:
     rez = _ or {link_resolver_name}()
     rez.is_count = True
@@ -178,6 +189,10 @@ def {link.name}{COUNT_POSTFIX}(self, _: T.Optional[{link_resolver_name}] = None,
     )
     return self
     """
+    s = normal
+    if link.cardinality == Cardinality.Many:
+        s += f"\n{count}"
+    return s
 
 
 def build_exclusive_functions_str(
@@ -585,6 +600,10 @@ def {prop.name}(self) -> {type_str}:
             required=link.required,
         )
         edge_resolver_map[link.name] = f"{link.target.model_name}Resolver"
+        if link.cardinality == Cardinality.Many:
+            edge_resolver_map[
+                link.name + COUNT_POSTFIX
+            ] = f"{link.target.model_name}Resolver"
         if not link.readonly and not link.is_computed:
             updatable_links.add(link.name)
         if link.is_exclusive:
