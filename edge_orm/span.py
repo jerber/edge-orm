@@ -15,9 +15,9 @@ except ModuleNotFoundError:
 @contextmanager
 def timer(*, op: str, description: str = None, use: bool) -> T.Iterator[T.Any]:
     if use:
-        start = time.process_time()
+        start = time.time()
         yield
-        took_ms = round((time.process_time() - start) * 1000, 2)
+        took_ms = round((time.time() - start) * 1000, 2)
         logger.debug(f"{op=}, {description} took {took_ms} ms")
     else:
         yield

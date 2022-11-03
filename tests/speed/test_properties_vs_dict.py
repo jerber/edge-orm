@@ -147,10 +147,10 @@ def test_speeds(times: int, user_cls: T.Type[UserSmall] | T.Type[User]) -> float
                 "created_at": datetime.now(),
             }
         )
-    start = time.process_time()
+    start = time.time()
     smalls = [user_cls(**k) for k in kwargs_lst]
     # smalls = parse_obj_as(list[user_cls], kwargs_lst)
-    took_micros = (time.process_time() - start) * 1_000_000
+    took_micros = (time.time() - start) * 1_000_000
     print(f"took {took_micros} ms, {took_micros / len(smalls)} per")
     return took_micros / len(smalls)
 

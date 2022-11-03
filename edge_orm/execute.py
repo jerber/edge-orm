@@ -36,7 +36,7 @@ async def query(
         variables = {}
     # TODO usually would simplify vars here but should do this in earlier step
     query_func = client.query_json if not only_one else client.query_single_json
-    start = time.process_time()
+    start = time.time()
     try:
         with span(
             op=f"edge-orm.{operation_from_query_str(query_str)}",
@@ -60,7 +60,7 @@ async def query(
             f"EdgeDB Query Exception: {e}, query_str and variables: {query_str=}, {variables=}"
         )
         raise e
-    took_ms = round((time.process_time() - start) * 1_000, 2)
+    took_ms = round((time.time() - start) * 1_000, 2)
     logger.debug(query_str)
     logger.debug(f"took {took_ms} ms")
     return response_dict
