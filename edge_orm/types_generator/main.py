@@ -16,6 +16,7 @@ from .introspection import (
 from edge_orm.node.models import CONVERSION_MAP, PropertyCardinality, FieldInfo
 
 ENV_VAR_PATTERN = r"[A-Z_]+"
+COUNT_POSTFIX = "_Count"
 
 
 class DBVendor(str, Enum):
@@ -143,7 +144,7 @@ async def {link.name}(
         client=client,
     )
 
-async def {link.name}__count(
+async def {link.name}{COUNT_POSTFIX}(
     self,
     resolver: {link_resolver_name} = None,
     cache_only: bool = CACHE_ONLY,
@@ -152,7 +153,7 @@ async def {link.name}__count(
     rez = resolver or {link_resolver_name}()
     rez.is_count = True
     return await self.resolve(
-        edge_name="{link.name}__count",
+        edge_name="{link.name}{COUNT_POSTFIX}",
         edge_resolver=rez,
         cache_only=cache_only,
         client=client,
@@ -167,11 +168,11 @@ def {link.name}(self, _: T.Optional[{link_resolver_name}] = None, /, make_first:
     self._nested_resolvers.add("{link.name}", _ or {link_resolver_name}(), make_first=make_first)
     return self
 
-def {link.name}__count(self, _: T.Optional[{link_resolver_name}] = None, /, make_first: bool = False) -> {node_resolver_name}:
+def {link.name}{COUNT_POSTFIX}(self, _: T.Optional[{link_resolver_name}] = None, /, make_first: bool = False) -> {node_resolver_name}:
     rez = _ or {link_resolver_name}()
     rez.is_count = True
     self._nested_resolvers.add(
-        "{link.name}__count",
+        "{link.name}{COUNT_POSTFIX}",
         rez,
         make_first=make_first
     )

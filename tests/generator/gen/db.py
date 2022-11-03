@@ -350,12 +350,12 @@ class UserResolver(Resolver[User, UserInsert, UserPatch], ResolverMixin):
         )
         return self
 
-    def friends__count(
+    def friends_Count(
         self, _: T.Optional[UserResolver] = None, /, make_first: bool = False
     ) -> UserResolver:
         rez = _ or UserResolver()
         rez.is_count = True
-        self._nested_resolvers.add("friends__count", rez, make_first=make_first)
+        self._nested_resolvers.add("friends_Count", rez, make_first=make_first)
         return self
 
     async def get(

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "edge-orm"
-version = "0.1.6"
+version = "0.1.7"
 description = ""
 authors = ["Jeremy Berman <jerber@sas.upenn.edu>"]
 readme = "README.md"

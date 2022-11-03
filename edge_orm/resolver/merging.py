@@ -33,7 +33,9 @@ def merge_fields(
         setattr(merged_resolver, key, f"{a_val}{separator}{b_val}")
 
 
-def merge_resolvers(a: ResolverType, b: ResolverType) -> T.Optional[ResolverType]:
+def merge_resolvers(
+    a: ResolverType, b: ResolverType, should_debug: bool = False
+) -> T.Optional[ResolverType]:
     # first merge, then see if a and b are subsets. If they are, return! else, None, they can't be merged
     if a.__class__ != b.__class__:
         raise MergeException(
@@ -71,11 +73,11 @@ def merge_resolvers(a: ResolverType, b: ResolverType) -> T.Optional[ResolverType
     # or separate this??
     if a.is_subset_of(merged_resolver) and b.is_subset_of(merged_resolver):
         return merged_resolver
-
-    logger.warning("NOT SUBSETS!")
-    logger.warning(
-        f"{a.is_subset_of(merged_resolver)=}, {b.is_subset_of(merged_resolver)=}"
-    )
+    if should_debug:
+        logger.warning("NOT SUBSETS!")
+        logger.warning(
+            f"{a.is_subset_of(merged_resolver)=}, {b.is_subset_of(merged_resolver)=}"
+        )
     return None
 
 

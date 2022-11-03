@@ -120,7 +120,7 @@ class User(Node):
             client=client,
         )
 
-    async def friends__count(
+    async def friends_Count(
         self,
         resolver: UserResolver = None,
         cache_only: bool = CACHE_ONLY,
@@ -129,7 +129,7 @@ class User(Node):
         rez = resolver or UserResolver()
         rez.is_count = True
         return await self.resolve(
-            edge_name="friends__count",
+            edge_name="friends_Count",
             edge_resolver=rez,
             cache_only=cache_only,
             client=client,
@@ -378,12 +378,12 @@ class UserResolver(Resolver[User, UserInsert, UserPatch], ResolverMixin):
         )
         return self
 
-    def friends__count(
+    def friends_Count(
         self, _: T.Optional[UserResolver] = None, /, make_first: bool = False
     ) -> UserResolver:
         rez = _ or UserResolver()
         rez.is_count = True
-        self._nested_resolvers.add("friends__count", rez, make_first=make_first)
+        self._nested_resolvers.add("friends_Count", rez, make_first=make_first)
         return self
 
     async def get(

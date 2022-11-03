@@ -361,7 +361,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
             s=filters_str, variables=self._query_variables
         )
 
-    def is_subset_of(self, other: "Resolver") -> bool:  # type: ignore
+    def is_subset_of(self, other: "Resolver", should_debug: bool = False) -> bool:  # type: ignore
         if self is other:
             return True
         if self._fields_to_return:
@@ -399,9 +399,10 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         self_filters_str, _ = self.build_filters_str_and_vars(prefix="")
         other_filters_str, _ = other.build_filters_str_and_vars(prefix="")
         if self_filters_str != other_filters_str:
-            logger.debug(
-                f"{self.__class__.__name__}: {self_filters_str=} != {other_filters_str}"
-            )
+            if should_debug:
+                logger.debug(
+                    f"{self.__class__.__name__}: {self_filters_str=} != {other_filters_str}"
+                )
             return False
 
         if not self._nested_resolvers.is_subset_of(other._nested_resolvers):
@@ -873,6 +874,9 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
                 if child:
                     if isinstance(child, list):
                         val = [resolver._parse_obj_with_cache(d) for d in child]
+                    elif isinstance(child, int):
+                        # counts
+                        val = child
                     else:
                         val = resolver._parse_obj_with_cache(child)
                 else:

@@ -1,6 +1,7 @@
 import typing as T
 from pydantic import BaseModel
 from edge_orm import helpers
+from edge_orm.types_generator.main import COUNT_POSTFIX
 
 if T.TYPE_CHECKING:
     from .model import Resolver, VARS
@@ -71,12 +72,12 @@ class NestedResolvers(BaseModel):
         for i, r in enumerate(resolvers):
             if i == 0:
                 new_prefix = f"{prefix}{helpers.SEPARATOR}{edge}" if prefix else edge
-                if r.is_count and "__count" in edge:
+                if r.is_count and COUNT_POSTFIX in edge:
                     # avoid not copying resolver and having it break. make SURE it is a count
                     filters_str, variables = r.build_filters_str_and_vars(
                         prefix=new_prefix
                     )
-                    resolver_s = f'{edge} := COUNT((SELECT .{edge.split("__")[0]} {filters_str}))'
+                    resolver_s = f"{edge} := count((SELECT .{edge.split(COUNT_POSTFIX)[0]} {filters_str}))"
                 else:
                     filters_str, variables = r.full_query_str_and_vars(
                         include_select=False, prefix=new_prefix
@@ -87,11 +88,11 @@ class NestedResolvers(BaseModel):
                 new_prefix = (
                     f"{prefix}{helpers.SEPARATOR}{key_name}" if prefix else key_name
                 )
-                if r.is_count and "__count in edge":
+                if r.is_count and COUNT_POSTFIX in edge:
                     filters_str, variables = r.build_filters_str_and_vars(
                         prefix=new_prefix
                     )
-                    resolver_s = f"{key_name} := COUNT((SELECT .{edge.split('__')[0]} {filters_str}))"
+                    resolver_s = f"{key_name} := count((SELECT .{edge.split(COUNT_POSTFIX)[0]} {filters_str}))"
                 else:
                     filters_str, variables = r.full_query_str_and_vars(
                         include_select=False, prefix=new_prefix
