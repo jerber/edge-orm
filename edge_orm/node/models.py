@@ -64,7 +64,12 @@ class IgnoreUnset(BaseModel):
 
     def __init__(self, **data: T.Any) -> None:
         data = {k: v for k, v in data.items() if v is not UNSET}
-        return super().__init__(**data)
+        super().__init__(**data)
+
+    def __setattr__(self, key: T.Any, value: T.Any) -> None:
+        if value is UNSET:
+            return
+        super().__setattr__(key, value)
 
 
 class Insert(IgnoreUnset):
