@@ -59,7 +59,15 @@ class EdgeConfigBase(BaseModel):
 COMPUTED = dict[str, T.Any]
 
 
-class Insert(BaseModel):
+class IgnoreUnset(BaseModel):
+    pass
+
+    def __init__(self, **data: T.Any) -> None:
+        data = {k: v for k, v in data.items() if v is not UNSET}
+        return super().__init__(**data)
+
+
+class Insert(IgnoreUnset):
     pass
 
     class Config:
@@ -68,7 +76,7 @@ class Insert(BaseModel):
         arbitrary_types_allowed = True
 
 
-class Patch(BaseModel):
+class Patch(IgnoreUnset):
     pass
 
     class Config:
