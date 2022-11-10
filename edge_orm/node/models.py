@@ -25,6 +25,7 @@ class Cardinality(str, Enum):
 
 class FieldInfo(BaseModel):
     cast: str
+    base_cast: str | None
     cardinality: Cardinality
     readonly: bool
     required: bool

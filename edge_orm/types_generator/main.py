@@ -304,20 +304,20 @@ def build_orm_config(
 EdgeConfig: T.ClassVar[EdgeConfigBase] = EdgeConfigBase(
     model_name = "{model_name}",
     client = CLIENT,
-    
+
     updatable_fields = {{{', '.join(add_quotes(sorted(list(updatable_fields))))}}},
     exclusive_fields = {{{', '.join(add_quotes(sorted(list(exclusive_fields))))}}},
-    
+
     appendix_properties = {stringify_set(appendix_properties)},
     computed_properties = {stringify_set(computed_properties)},
     basemodel_properties = {stringify_set(set(basemodel_properties))},
     custom_annotations = {stringify_set(set(custom_annotations))},
     mutate_on_update = {stringify_dict(mutate_on_update)},
-    
+
     node_edgedb_conversion_map = {stringify_basemodel_dict(node_edgedb_conversion_map)},
     insert_edgedb_conversion_map = {stringify_basemodel_dict(insert_edgedb_conversion_map)},
     patch_edgedb_conversion_map = {stringify_basemodel_dict(patch_edgedb_conversion_map)},
-    
+
     insert_link_conversion_map = {stringify_basemodel_dict(insert_link_conversion_map)}
 )
     """
@@ -371,13 +371,16 @@ def stringify_basemodel_dict(d: dict[str, BaseModelType]) -> str:
     return f"{{{','.join(inner)}}}"
 
 
-def edgedb_conversion_type_from_prop(prop: Property) -> str:
+def edgedb_conversion_type_from_prop(prop: Property, get_base: bool = False) -> str:
     """
     s = prop.target.name
     pattern = r"default::\w+"
     s = re.sub(pattern, "std::str", s)
     return s
     """
+    if get_base:
+        if prop.target.name.startswith("default::") and prop.target.bases:
+            return prop.target.bases[0].name
     return prop.target.name
 
 
@@ -471,8 +474,10 @@ def build_node_and_resolver(
 
     for prop in object_type.properties:
         conversion_type = edgedb_conversion_type_from_prop(prop)
+        base_conversion_type = edgedb_conversion_type_from_prop(prop, get_base=True)
         node_edgedb_conversion_map[prop.name] = FieldInfo(
             cast=conversion_type,
+            base_cast=base_conversion_type,
             cardinality=prop.cardinality,
             readonly=prop.readonly,
             required=prop.required,
@@ -547,6 +552,7 @@ def {prop.name}(self) -> {type_str}:
             if not prop.is_computed and not prop.not_insertable:
                 insert_edgedb_conversion_map[prop.name] = FieldInfo(
                     cast=conversion_type,
+                    base_cast=base_conversion_type,
                     cardinality=prop.cardinality,
                     readonly=prop.readonly,
                     required=prop.required,
@@ -571,6 +577,7 @@ def {prop.name}(self) -> {type_str}:
             if not prop.is_computed and not prop.readonly:
                 patch_edgedb_conversion_map[prop.name] = FieldInfo(
                     cast=conversion_type,
+                    base_cast=base_conversion_type,
                     cardinality=prop.cardinality,
                     readonly=prop.readonly,
                     required=prop.required,
@@ -595,6 +602,7 @@ def {prop.name}(self) -> {type_str}:
             continue
         link_conversion_map[link.name] = FieldInfo(
             cast=link.target.model_name,
+            base_cast=None,
             cardinality=link.cardinality,
             readonly=link.readonly,
             required=link.required,

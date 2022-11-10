@@ -42,10 +42,15 @@ class ElementType(BaseModel):
         return self.name.split("::")[-1]
 
 
+class Base(BaseModel):
+    name: str
+
+
 class Target(BaseModel):
     name: str
     # prob do not need element type
     element_type: ElementType | None = None
+    bases: list[Base] | None = None
 
     @property
     def model_name(self) -> str:
@@ -67,6 +72,10 @@ class Constraint(BaseModel):
     @property
     def is_exclusive(self) -> bool:
         return self.name == "std::exclusive"
+
+
+class Ancestor(BaseModel):
+    name: str
 
 
 class Index(BaseModel):
@@ -117,15 +126,19 @@ class Param(BaseModel):
         return False
 
     def edgedb_core_type(self, enums_path: str = None) -> str:
+        if self.target.bases and self.target.name.startswith("default::"):
+            target_base_name = self.target.bases[0].name
+        else:
+            target_base_name = self.target.name
         pattern = r"::(\w+)"
-        core_types = re.findall(pattern, self.target.name)
+        core_types = re.findall(pattern, target_base_name)
         if len(core_types) != 1:
             raise IntrospectionException(
                 f"Problem parsing core types {core_types=} for {self.name=}, {self.dict()=}"
             )
         s = core_types[0]
         if enums_path:
-            if self.target.name.startswith("default::"):
+            if target_base_name.startswith("default::"):
                 s = f"{enums_path}.{s}"
         return s
 
@@ -219,6 +232,9 @@ select ObjectType {
             name,
             [is Array].element_type: {
                 name
+            },
+            [is ScalarType].bases: {
+                name
             }
         },
         constraints: {
@@ -260,6 +276,12 @@ select ScalarType {
     },
     constraints: {
         name
+    },
+    bases: {
+        name
+    },
+    ancestors: {
+        name
     }
 } filter contains(.name, 'default::');
 """
@@ -267,10 +289,12 @@ select ScalarType {
 
 class ScalarType(BaseModel):
     name: str
-    enum_values: T.List[str]
+    enum_values: T.List[str] | None = None
     abstract: bool
     annotations: T.List[Annotation]
     constraints: T.List[Constraint]
+    bases: T.List[Base]
+    ancestors: T.List[Ancestor]
 
     @property
     def node_name(self) -> str:
