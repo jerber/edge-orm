@@ -432,6 +432,30 @@ def remove_falsies(lst: list[ListType]) -> list[ListType]:
     return [i for i in lst if i]
 
 
+class InsertPatch(str, Enum):
+    INSERT = "Insert"
+    PATCH = "Patch"
+
+
+def insert_patch_str(
+    is_hydrated: bool,
+    property_strs: list[str],
+    model_name: str,
+    insert_patch: InsertPatch,
+) -> str:
+    if is_hydrated:
+        inherits = f"{model_name}Hydrated"
+        rez_strs = [s for s in property_strs if "Resolver" in s]
+        if not rez_strs:
+            inner_str = indent_lines("pass")
+        else:
+            inner_str = indent_lines("\n".join(rez_strs))
+    else:
+        inherits = insert_patch.value
+        inner_str = indent_lines("\n".join(property_strs))
+    return f"class {model_name}({inherits}):\n{inner_str}"
+
+
 def build_node_and_resolver(
     object_type: ObjectType,
     node_config: T.Optional[NodeConfig],
@@ -443,6 +467,7 @@ def build_node_and_resolver(
     allow_inserting_id: bool = True,
     resolver_mixin_model: str | None = None,
 ) -> str:
+    is_hydrate = hydrate or insert_hydrate or patch_hydrate
     # need to sort props and links by required, exclusive, no default, rest
     object_type.properties.sort(
         key=lambda x: f"{not x.is_computed}-{x.required}-{x.is_exclusive}-{x.default}",
@@ -675,23 +700,21 @@ def {prop.name}(self) -> {type_str}:
     patch_model_name = f"{object_type.node_name}Patch"
 
     # insert type
-    insert_inner_str = "\n".join(insert_property_strs)
     insert_conversion_map_str = f"_edgedb_conversion_map: T.Dict[str, T.Dict[str, T.Union[str, bool]]] = {stringify_dict(insert_edgedb_conversion_map)}"
-    # insert_s = f"class {insert_model_name}(Insert):\n{indent_lines(insert_inner_str)}\n\n{indent_lines(insert_conversion_map_str)}"
-
-    insert_inherits = (
-        f"Insert" if not insert_hydrate else f"{insert_model_name}Hydrated"
+    insert_s = insert_patch_str(
+        is_hydrated=insert_hydrate,
+        property_strs=insert_property_strs,
+        model_name=insert_model_name,
+        insert_patch=InsertPatch.INSERT,
     )
-    insert_s = f"class {insert_model_name}({insert_inherits}):\n{indent_lines(insert_inner_str)}"
 
     # patch type
-    patch_inner_str = "\n".join(patch_property_strs)
     patch_conversion_map_str = f"_edgedb_conversion_map: T.Dict[str, T.Dict[str, T.Union[str, bool]]] = {stringify_dict(patch_edgedb_conversion_map)}"
-    # patch_s = f"class {patch_model_name}(Patch):\n{indent_lines(patch_inner_str)}\n\n{indent_lines(patch_conversion_map_str)}"
-
-    patch_inherits = f"Patch" if not patch_hydrate else f"{patch_model_name}Hydrated"
-    patch_s = (
-        f"class {patch_model_name}({patch_inherits}):\n{indent_lines(patch_inner_str)}"
+    patch_s = insert_patch_str(
+        is_hydrated=patch_hydrate,
+        property_strs=patch_property_strs,
+        model_name=patch_model_name,
+        insert_patch=InsertPatch.PATCH,
     )
 
     # node
@@ -864,7 +887,7 @@ def build_hydrate_imports(db_config: DBConfig) -> str:
             patch_node_name = f"{node_name}Patch"
             patch_hydrated_name = f"{patch_node_name}Hydrated"
             import_strs.append(
-                f"from {config.insert_path} import {patch_node_name} as {patch_hydrated_name}"
+                f"from {config.patch_path} import {patch_node_name} as {patch_hydrated_name}"
             )
             # idk why i have the part below, was just copying from dgraph_orm, seems unecessary and wrong
             # import_strs.append(
