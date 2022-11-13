@@ -37,6 +37,9 @@ class PropertyConfig(BaseModel):
 
 class NodeConfig(BaseModel):
     module_path: str | None = None
+    insert_path: str | None = None
+    patch_path: str | None = None
+
     appendix_properties: T.List[str] = []
     ignore_properties: T.List[str] = []
     basemodel_properties: T.Dict[str, PropertyConfig] = {}
@@ -434,6 +437,8 @@ def build_node_and_resolver(
     node_config: T.Optional[NodeConfig],
     edge_resolver_map_strs: T.List[str],
     hydrate: bool,
+    insert_hydrate: bool,
+    patch_hydrate: bool,
     dehydrate: bool,
     allow_inserting_id: bool = True,
     resolver_mixin_model: str | None = None,
@@ -673,13 +678,21 @@ def {prop.name}(self) -> {type_str}:
     insert_inner_str = "\n".join(insert_property_strs)
     insert_conversion_map_str = f"_edgedb_conversion_map: T.Dict[str, T.Dict[str, T.Union[str, bool]]] = {stringify_dict(insert_edgedb_conversion_map)}"
     # insert_s = f"class {insert_model_name}(Insert):\n{indent_lines(insert_inner_str)}\n\n{indent_lines(insert_conversion_map_str)}"
-    insert_s = f"class {insert_model_name}(Insert):\n{indent_lines(insert_inner_str)}"
+
+    insert_inherits = (
+        f"Insert" if not insert_hydrate else f"{insert_model_name}Hydrated"
+    )
+    insert_s = f"class {insert_model_name}({insert_inherits}):\n{indent_lines(insert_inner_str)}"
 
     # patch type
     patch_inner_str = "\n".join(patch_property_strs)
     patch_conversion_map_str = f"_edgedb_conversion_map: T.Dict[str, T.Dict[str, T.Union[str, bool]]] = {stringify_dict(patch_edgedb_conversion_map)}"
     # patch_s = f"class {patch_model_name}(Patch):\n{indent_lines(patch_inner_str)}\n\n{indent_lines(patch_conversion_map_str)}"
-    patch_s = f"class {patch_model_name}(Patch):\n{indent_lines(patch_inner_str)}"
+
+    patch_inherits = f"Patch" if not patch_hydrate else f"{patch_model_name}Hydrated"
+    patch_s = (
+        f"class {patch_model_name}({patch_inherits}):\n{indent_lines(patch_inner_str)}"
+    )
 
     # node
     node_properties_str = "\n".join(property_strs)
@@ -791,6 +804,10 @@ async def build_nodes_and_resolvers(
                 node_config=db_config.nodes.get(object_type.node_name),
                 edge_resolver_map_strs=edge_resolver_map_strs,
                 hydrate=object_type.node_name in nodes_to_hydrate and not dehydrate,
+                insert_hydrate=object_type.node_name + "Insert" in nodes_to_hydrate
+                and not dehydrate,
+                patch_hydrate=object_type.node_name + "Patch" in nodes_to_hydrate
+                and not dehydrate,
                 dehydrate=dehydrate,
                 resolver_mixin_model=resolver_mixin_model,
             )
@@ -837,6 +854,18 @@ def build_hydrate_imports(db_config: DBConfig) -> str:
             import_strs.append(
                 f"from {config.module_path} import {node_name} as {hydrated_name}"
             )
+        if config.insert_path:
+            insert_node_name = f"{node_name}Insert"
+            insert_hydrated_name = f"{insert_node_name}Hydrated"
+            import_strs.append(
+                f"from {config.insert_path} import {insert_node_name} as {insert_hydrated_name}"
+            )
+        if config.patch_path:
+            patch_node_name = f"{node_name}Patch"
+            patch_hydrated_name = f"{patch_node_name}Hydrated"
+            import_strs.append(
+                f"from {config.insert_path} import {patch_node_name} as {patch_hydrated_name}"
+            )
             # idk why i have the part below, was just copying from dgraph_orm, seems unecessary and wrong
             # import_strs.append(
             #     f"{hydrated_name}.{CONFIG_NAME}.resolver._node = {hydrated_name}"
@@ -849,6 +878,10 @@ def get_nodes_to_hydrate(db_config: DBConfig) -> T.Set[str]:
     for node_name, config in db_config.nodes.items():
         if config.module_path:
             node_names.add(node_name)
+        if config.insert_path:
+            node_names.add(node_name + "Insert")
+        if config.patch_path:
+            node_names.add(node_name + "Patch")
     return node_names
 
 
