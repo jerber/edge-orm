@@ -80,6 +80,7 @@ class Insert(IgnoreUnset):
         allow_mutation = True
         validate_assignment = True
         arbitrary_types_allowed = True
+        anystr_strip_whitespace = True
 
 
 class Patch(IgnoreUnset):
@@ -89,6 +90,7 @@ class Patch(IgnoreUnset):
         allow_mutation = True
         validate_assignment = True
         arbitrary_types_allowed = True
+        anystr_strip_whitespace = True
 
 
 class classproperty(property):
