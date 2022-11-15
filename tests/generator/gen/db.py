@@ -42,7 +42,7 @@ class User(Node):
     created_at_: T.Union[datetime, UnsetType] = Field(UNSET, alias="created_at")
     name: str = Field(...)
     age: T.Optional[int] = Field(None)
-    user_role_: T.Union[T.Optional[enums.UserRole], UnsetType] = Field(
+    user_role_: T.Union[T.Optional[anyenum], UnsetType] = Field(
         UNSET, alias="user_role"
     )
     images_: T.Union[T.Optional[T.List[Image]], UnsetType] = Field(
@@ -61,49 +61,49 @@ class User(Node):
     @property
     def last_updated_at(self) -> datetime:
         # if self.last_updated_at_ is UNSET:
-        if "last_updated_at_" not in self.__fields_set__:
+        if "last_updated_at_" not in self.set_fields_:
             raise errors.AppendixPropertyException("last_updated_at is unset")
         return self.last_updated_at_  # type: ignore
 
     @property
     def created_at(self) -> datetime:
         # if self.created_at_ is UNSET:
-        if "created_at_" not in self.__fields_set__:
+        if "created_at_" not in self.set_fields_:
             raise errors.AppendixPropertyException("created_at is unset")
         return self.created_at_  # type: ignore
 
     @property
-    def user_role(self) -> T.Optional[enums.UserRole]:
+    def user_role(self) -> T.Optional[anyenum]:
         # if self.user_role_ is UNSET:
-        if "user_role_" not in self.__fields_set__:
+        if "user_role_" not in self.set_fields_:
             raise errors.AppendixPropertyException("user_role is unset")
         return self.user_role_  # type: ignore
 
     @property
     def images(self) -> T.Optional[T.List[Image]]:
         # if self.images_ is UNSET:
-        if "images_" not in self.__fields_set__:
+        if "images_" not in self.set_fields_:
             raise errors.AppendixPropertyException("images is unset")
         return self.images_  # type: ignore
 
     @property
     def email(self) -> T.Optional[EmailStr]:
         # if self.email_ is UNSET:
-        if "email_" not in self.__fields_set__:
+        if "email_" not in self.set_fields_:
             raise errors.AppendixPropertyException("email is unset")
         return self.email_  # type: ignore
 
     @property
     def names_of_friends(self) -> T.Optional[T.Set[str]]:
         # if self.names_of_friends_ is UNSET:
-        if "names_of_friends_" not in self.__fields_set__:
+        if "names_of_friends_" not in self.set_fields_:
             raise errors.ComputedPropertyException("names_of_friends is unset")
         return self.names_of_friends_  # type: ignore
 
     @property
     def ids_of_friends(self) -> T.Optional[T.Set[UUID]]:
         # if self.ids_of_friends_ is UNSET:
-        if "ids_of_friends_" not in self.__fields_set__:
+        if "ids_of_friends_" not in self.set_fields_:
             raise errors.ComputedPropertyException("ids_of_friends is unset")
         return self.ids_of_friends_  # type: ignore
 
@@ -135,66 +135,77 @@ class User(Node):
         node_edgedb_conversion_map={
             "id": FieldInfo(
                 cast="std::uuid",
+                base_cast="std::uuid",
                 cardinality=Cardinality.One,
                 readonly=True,
                 required=True,
             ),
             "phone_number": FieldInfo(
                 cast="std::str",
+                base_cast="std::str",
                 cardinality=Cardinality.One,
                 readonly=True,
                 required=True,
             ),
             "last_updated_at": FieldInfo(
                 cast="std::datetime",
+                base_cast="std::datetime",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=True,
             ),
             "created_at": FieldInfo(
                 cast="std::datetime",
+                base_cast="std::datetime",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=True,
             ),
             "name": FieldInfo(
                 cast="std::str",
+                base_cast="std::str",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=True,
             ),
             "age": FieldInfo(
                 cast="std::int16",
+                base_cast="std::int16",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=False,
             ),
             "user_role": FieldInfo(
                 cast="default::UserRole",
+                base_cast="std::anyenum",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=False,
             ),
             "images": FieldInfo(
                 cast="array<std::json>",
+                base_cast="array<std::json>",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=False,
             ),
             "email": FieldInfo(
                 cast="std::str",
+                base_cast="std::str",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=False,
             ),
             "names_of_friends": FieldInfo(
                 cast="std::str",
+                base_cast="std::str",
                 cardinality=Cardinality.Many,
                 readonly=False,
                 required=False,
             ),
             "ids_of_friends": FieldInfo(
                 cast="std::uuid",
+                base_cast="std::uuid",
                 cardinality=Cardinality.Many,
                 readonly=False,
                 required=False,
@@ -203,54 +214,63 @@ class User(Node):
         insert_edgedb_conversion_map={
             "id": FieldInfo(
                 cast="std::uuid",
+                base_cast="std::uuid",
                 cardinality=Cardinality.One,
                 readonly=True,
                 required=True,
             ),
             "phone_number": FieldInfo(
                 cast="std::str",
+                base_cast="std::str",
                 cardinality=Cardinality.One,
                 readonly=True,
                 required=True,
             ),
             "last_updated_at": FieldInfo(
                 cast="std::datetime",
+                base_cast="std::datetime",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=True,
             ),
             "created_at": FieldInfo(
                 cast="std::datetime",
+                base_cast="std::datetime",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=True,
             ),
             "name": FieldInfo(
                 cast="std::str",
+                base_cast="std::str",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=True,
             ),
             "age": FieldInfo(
                 cast="std::int16",
+                base_cast="std::int16",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=False,
             ),
             "user_role": FieldInfo(
                 cast="default::UserRole",
+                base_cast="std::anyenum",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=False,
             ),
             "images": FieldInfo(
                 cast="array<std::json>",
+                base_cast="array<std::json>",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=False,
             ),
             "email": FieldInfo(
                 cast="std::str",
+                base_cast="std::str",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=False,
@@ -259,42 +279,49 @@ class User(Node):
         patch_edgedb_conversion_map={
             "last_updated_at": FieldInfo(
                 cast="std::datetime",
+                base_cast="std::datetime",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=True,
             ),
             "created_at": FieldInfo(
                 cast="std::datetime",
+                base_cast="std::datetime",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=True,
             ),
             "name": FieldInfo(
                 cast="std::str",
+                base_cast="std::str",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=True,
             ),
             "age": FieldInfo(
                 cast="std::int16",
+                base_cast="std::int16",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=False,
             ),
             "user_role": FieldInfo(
                 cast="default::UserRole",
+                base_cast="std::anyenum",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=False,
             ),
             "images": FieldInfo(
                 cast="array<std::json>",
+                base_cast="array<std::json>",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=False,
             ),
             "email": FieldInfo(
                 cast="std::str",
+                base_cast="std::str",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=False,
@@ -303,6 +330,7 @@ class User(Node):
         insert_link_conversion_map={
             "friends": FieldInfo(
                 cast="User",
+                base_cast=None,
                 cardinality=Cardinality.Many,
                 readonly=False,
                 required=False,
@@ -318,7 +346,7 @@ class UserInsert(Insert):
     created_at: T.Union[datetime, UnsetType] = Field(UNSET)
     name: str
     age: T.Union[int, None, UnsetType] = Field(UNSET)
-    user_role: T.Union[enums.UserRole, None, UnsetType] = Field(UNSET)
+    user_role: T.Union[anyenum, None, UnsetType] = Field(UNSET)
     images: T.Union[T.List[Image], None, UnsetType] = Field(UNSET)
     email: T.Union[EmailStr, None, UnsetType] = Field(UNSET)
     friends: T.Optional[UserResolver] = None
@@ -329,7 +357,7 @@ class UserPatch(Patch):
     created_at: T.Union[T.Optional[datetime], UnsetType] = Field(UNSET)
     name: T.Union[str, UnsetType] = Field(UNSET)
     age: T.Union[T.Optional[int], UnsetType] = Field(UNSET)
-    user_role: T.Union[T.Optional[enums.UserRole], UnsetType] = Field(UNSET)
+    user_role: T.Union[T.Optional[anyenum], UnsetType] = Field(UNSET)
     images: T.Union[T.Optional[T.List[Image]], UnsetType] = Field(UNSET)
     email: T.Union[T.Optional[EmailStr], UnsetType] = Field(UNSET)
     friends: T.Union[T.Optional[UserResolver], UnsetType] = Field(
@@ -528,18 +556,21 @@ class DateModel(Node):
         node_edgedb_conversion_map={
             "id": FieldInfo(
                 cast="std::uuid",
+                base_cast="std::uuid",
                 cardinality=Cardinality.One,
                 readonly=True,
                 required=True,
             ),
             "created_at": FieldInfo(
                 cast="std::datetime",
+                base_cast="std::datetime",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=True,
             ),
             "last_updated_at": FieldInfo(
                 cast="std::datetime",
+                base_cast="std::datetime",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=True,
@@ -548,18 +579,21 @@ class DateModel(Node):
         insert_edgedb_conversion_map={
             "id": FieldInfo(
                 cast="std::uuid",
+                base_cast="std::uuid",
                 cardinality=Cardinality.One,
                 readonly=True,
                 required=True,
             ),
             "created_at": FieldInfo(
                 cast="std::datetime",
+                base_cast="std::datetime",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=True,
             ),
             "last_updated_at": FieldInfo(
                 cast="std::datetime",
+                base_cast="std::datetime",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=True,
@@ -568,12 +602,14 @@ class DateModel(Node):
         patch_edgedb_conversion_map={
             "created_at": FieldInfo(
                 cast="std::datetime",
+                base_cast="std::datetime",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=True,
             ),
             "last_updated_at": FieldInfo(
                 cast="std::datetime",
+                base_cast="std::datetime",
                 cardinality=Cardinality.One,
                 readonly=False,
                 required=True,

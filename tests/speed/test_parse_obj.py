@@ -20,6 +20,8 @@ def test_build_user() -> None:
     # user._ids_of_friends = ["juds", "dsj"]
     # debug(user)
     debug(user.__fields_set__)
+    debug(user.set_fields_)
+    debug(user.__fields__.keys())
 
     print(f"{user.names_of_friends=}")
     assert user.names_of_friends == set(["Juandala", "huc"])

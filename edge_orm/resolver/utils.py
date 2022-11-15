@@ -76,7 +76,7 @@ def model_to_set_str_vars(
     eg: {"name": "Jeremy Berman", "age": UNSET, "last_updated": 2022...} -> { name := <str>$name, age := <int>{}, ...}"""
     str_lst: list[str] = []
     variables: VARS = {}
-    for field_name in model.__fields_set__:
+    for field_name in model.set_fields_:
         original_val = getattr(model, field_name)
         if field_name not in conversion_map:
             # this is a resolver

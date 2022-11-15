@@ -60,13 +60,20 @@ class EdgeConfigBase(BaseModel):
 COMPUTED = dict[str, T.Any]
 
 
-class IgnoreUnset(BaseModel):
-    pass
+class SetFields(BaseModel):
+    _purged_unsets: bool = PrivateAttr(False)
 
-    def __init__(self, **data: T.Any) -> None:
-        data = {k: v for k, v in data.items() if v is not UNSET}
-        super().__init__(**data)
+    @property
+    def set_fields_(self) -> set[str]:
+        if not self._purged_unsets:
+            for key in self.__fields_set__.copy():
+                if getattr(self, key, None) is UNSET:
+                    self.__fields_set__.remove(key)
+            self._purged_unsets = True
+        return self.__fields_set__
 
+
+class IgnoreUnset(SetFields):
     def __setattr__(self, key: T.Any, value: T.Any) -> None:
         if value is UNSET:
             return
@@ -98,7 +105,7 @@ class classproperty(property):
         return self.fget(owner_cls)  # type: ignore
 
 
-class Node(BaseModel):
+class Node(SetFields):
     id: UUID
 
     EdgeConfig: T.ClassVar[EdgeConfigBase]

@@ -564,7 +564,7 @@ def build_node_and_resolver(
 @property
 def {prop.name}(self) -> {type_str}:
     # if self.{property_name} is UNSET:
-    if "{property_name}" not in self.__fields_set__:
+    if "{property_name}" not in self.set_fields_:
             raise {exception_name}("{prop.name} is unset")
     return self.{property_name} # type: ignore
                 """

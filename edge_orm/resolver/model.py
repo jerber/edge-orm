@@ -653,7 +653,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
             return None
         mutate_on_update_strs: list[str] = []
         for field_name, expression in mutate_on_update_d.items():
-            if field_name not in patch.__fields_set__:
+            if field_name not in patch.set_fields_:
                 mutate_on_update_strs.append(f"{field_name} := {expression}")
         mutate_on_update_str = ", ".join(mutate_on_update_strs)
         return mutate_on_update_str
@@ -727,7 +727,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         client: edgedb.AsyncIOClient | None = None,
         mutate_on_update: bool = True,
     ) -> NodeType:
-        if not patch.__fields_set__:
+        if not patch.set_fields_:
             raise errors.ResolverException("Patch is empty.")
         self.validate_field_name_value_filters(
             operation_name="update_one", field_name=field_name, value=value
@@ -753,7 +753,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         client: edgedb.AsyncIOClient | None = None,
         mutate_on_update: bool = True,
     ) -> list[NodeType]:
-        if not patch.__fields_set__:
+        if not patch.set_fields_:
             raise errors.ResolverException("Patch is empty.")
         if not update_all:
             if not self.has_filters():
@@ -851,7 +851,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
 
     def patch_from_insert(self, insert: InsertType) -> PatchType:
         patch = self._patch_cls()
-        for field in insert.__fields_set__:
+        for field in insert.set_fields_:
             if field in self._patch_cls.__fields__:
                 setattr(patch, field, getattr(insert, field))
         return patch
@@ -862,7 +862,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
         # TODO counts will fail, catch counts early
         node = self._node_cls(**d)
         # TODO speed test
-        fields_set = {re.sub(r"_$", "", s) for s in node.__fields_set__}
+        fields_set = {re.sub(r"_$", "", s) for s in node.set_fields_}
         other_fields = d.keys() - fields_set
         for field_name in sorted(other_fields):
             resolver = self._nested_resolvers.resolver_from_field_name(field_name)
