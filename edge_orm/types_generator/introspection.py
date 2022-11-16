@@ -126,7 +126,11 @@ class Param(BaseModel):
         return False
 
     def edgedb_core_type(self, enums_path: str = None) -> str:
-        if self.target.bases and self.target.name.startswith("default::"):
+        if (
+            self.target.bases
+            and self.target.name.startswith("default::")
+            and self.target.bases[0].name != "std::anyenum"
+        ):
             target_base_name = self.target.bases[0].name
         else:
             target_base_name = self.target.name

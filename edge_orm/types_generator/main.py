@@ -383,7 +383,9 @@ def edgedb_conversion_type_from_prop(prop: Property, get_base: bool = False) -> 
     """
     if get_base:
         if prop.target.name.startswith("default::") and prop.target.bases:
-            return prop.target.bases[0].name
+            base = prop.target.bases[0]
+            if base.name != "std::anyenum":
+                return base.name
     return prop.target.name
 
 
