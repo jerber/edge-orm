@@ -1,6 +1,7 @@
 import typing as T
 import time
 import orjson
+from enum import Enum
 import edgedb
 from edge_orm import logger
 from edge_orm.span import span
@@ -25,6 +26,12 @@ def operation_from_query_str(query_str: str) -> str:
     return "query"
 
 
+def check_enum(v: T.Any) -> T.Any:
+    if isinstance(v, Enum):
+        return v.value
+    return v
+
+
 async def query(
     *,
     client: edgedb.AsyncIOClient,
@@ -36,6 +43,8 @@ async def query(
         variables = {}
     # TODO usually would simplify vars here but should do this in earlier step
     query_func = client.query_json if not only_one else client.query_single_json
+    # turn enums into values
+    variables = {k: check_enum(v) for k, v in variables.items()}
     start = time.time()
     try:
         with span(
