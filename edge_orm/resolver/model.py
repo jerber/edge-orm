@@ -328,9 +328,12 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
             nested_query_str,
             nested_vars,
         ) = self._nested_resolvers.build_query_str_and_vars(prefix=prefix)
-
-        brackets_strs = [*self._fields_to_return, *self._extra_fields, nested_query_str]
-        brackets_str = ", ".join(sorted([s for s in brackets_strs if s]))
+        brackets_strs = [
+            *sorted(self._fields_to_return),
+            *sorted(self._extra_fields),
+            nested_query_str,
+        ]
+        brackets_str = ", ".join([s for s in brackets_strs if s])
         s = f"{select}{{ {brackets_str} }}"
 
         if include_filters:

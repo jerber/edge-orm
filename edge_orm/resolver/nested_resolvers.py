@@ -111,7 +111,7 @@ class NestedResolvers(BaseModel):
             s, v = self.edge_to_query_str_and_vars(edge=edge, prefix=prefix)
             edge_strs.append(s)
             vars_lst.append(v)
-
+        edge_strs.sort()
         s = ", ".join(edge_strs)
         flattened_d = {k: v for d in vars_lst for k, v in d.items()}
         return s, flattened_d
