@@ -452,6 +452,25 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
             return None
         return model_lst[0]
 
+    async def count(self, client: edgedb.AsyncIOClient | None = None) -> int:
+        query_str, variables = self.full_query_str_and_vars(
+            include_select=False, prefix=""
+        )
+
+        query_str = f"SELECT count({self.model_name} {query_str})"
+        with span.span(
+            op=f"edgedb.query.{self.model_name}", description=query_str[:200]
+        ):
+            c = await execute.query(
+                client=client or self._node_config.client,
+                query_str=query_str,
+                variables=variables,
+                only_one=True,
+            )
+            if not isinstance(c, int):
+                raise errors.ResolverException(f"Count must be an int {c=}.")
+            return c
+
     async def _get(
         self,
         field_name: str,
