@@ -402,14 +402,19 @@ def build_validator_module_imports(db_config: DBConfig) -> str:
     return "\n".join(sorted(list(set(from_str_import_strs))))
 
 
-def key_from_field_name(f_name: str, node_config: NodeConfig) -> str:
+def key_from_field_name(
+    f_name: str, node_config: NodeConfig, computed_properties: set[str]
+) -> str:
     k = f_name
-    if f_name in node_config.appendix_properties:
+    if f_name in node_config.appendix_properties or f_name in computed_properties:
         k += "_"
+    # also if it is a computed, add this
     return f'"{k}"'
 
 
-def build_from_str_validator_str(node_config: NodeConfig | None) -> str:
+def build_from_str_validator_str(
+    node_config: NodeConfig | None, computed_properties: set[str]
+) -> str:
     if node_config is None:
         return ""
     field_name_strs: T.List[str] = []
@@ -419,7 +424,13 @@ def build_from_str_validator_str(node_config: NodeConfig | None) -> str:
     for field_name, props_config in node_config.basemodel_properties.items():
         if props_config.validate_as_basemodel is False:
             continue
-        field_name_strs.append(key_from_field_name(field_name, node_config=node_config))
+        field_name_strs.append(
+            key_from_field_name(
+                field_name,
+                node_config=node_config,
+                computed_properties=computed_properties,
+            )
+        )
     if not field_name_strs:
         return ""
     return f"""
@@ -721,7 +732,9 @@ def {prop.name}(self) -> {type_str}:
 
     # node
     node_properties_str = "\n".join(property_strs)
-    from_str_validator_str = build_from_str_validator_str(node_config=node_config)
+    from_str_validator_str = build_from_str_validator_str(
+        node_config=node_config, computed_properties=computed_properties
+    )
     if hydrate:
         node_properties_str = ""
         from_str_validator_str = ""
