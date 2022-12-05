@@ -86,7 +86,9 @@ def indent_lines(s: str, indent: str = DEFAULT_INDENT) -> str:
     return indent + f"\n{indent}".join(chunks)
 
 
-def imports(enums_module: str, resolver_mixin_path: str | None) -> str:
+def imports(
+    enums_module: str, client_module: str, resolver_mixin_path: str | None
+) -> str:
     lines = [
         "from __future__ import annotations",
         "import os",
@@ -101,6 +103,7 @@ def imports(enums_module: str, resolver_mixin_path: str | None) -> str:
         f"from {PATH_TO_MODULE} import Node, Insert, Patch, EdgeConfigBase, Resolver, NodeException, ResolverException, UNSET, UnsetType, validators, errors, resolver_enums",
         "FilterConnector = resolver_enums.FilterConnector",
         f"from . import {enums_module} as enums",
+        f"from .{client_module} import CLIENT",
     ]
     if resolver_mixin_path:
         lines.append(resolver_mixin_path)
@@ -937,14 +940,16 @@ async def build_enums_from_config(db_config: DBConfig, include_strawberry: bool)
 async def build_from_config(
     db_config: DBConfig,
     enums_module: str,
+    client_module: str,
     hydrate: bool = False,
     dehydrate: bool = False,
 ) -> str:
     client = edgedb.create_async_client(dsn=db_config.dsn)
     imports_str = imports(
-        enums_module=enums_module, resolver_mixin_path=db_config.resolver_mixin_path
+        enums_module=enums_module,
+        client_module=client_module,
+        resolver_mixin_path=db_config.resolver_mixin_path,
     )
-    client_str = build_client(db_config)
     cache_only_str = f"CACHE_ONLY: bool = {db_config.cache_only}"
     validator_module_imports = build_validator_module_imports(db_config)
     hydrate_imports = "" if not hydrate else build_hydrate_imports(db_config)
@@ -958,7 +963,6 @@ async def build_from_config(
     s = "\n".join(
         [
             imports_str,
-            client_str,
             cache_only_str,
             validator_module_imports,
             hydrate_imports,
@@ -1002,12 +1006,28 @@ async def generate(
         if not os.path.exists(output_path):
             os.makedirs(output_path)
         open(output_path / f"{enums_module}.py", "w").write(enums_s)
+        # build client file
+        client_s = format_str(
+            "\n".join(
+                [
+                    "import os",
+                    "from edgedb import create_async_client",
+                    build_client(db_config),
+                    '__all__ = ["CLIENT"]',
+                ]
+            ),
+            mode=FileMode(),
+        )
+        client_module = f"{db_name}_client"
+        open(output_path / f"{client_module}.py", "w").write(client_s)
+
         hydrate = db_config.hydrate
         # must include strawberry types in both for circular dependency reasons
         s = await build_from_config(
             db_config=db_config,
             dehydrate=hydrate,
             enums_module=enums_module,
+            client_module=client_module,
         )
         open(output_path / f"{db_name}.py", "w").write(s)
         if hydrate:
@@ -1015,5 +1035,6 @@ async def generate(
                 db_config=db_config,
                 hydrate=True,
                 enums_module=enums_module,
+                client_module=client_module,
             )
             open(output_path / f"{db_name}_hydrated.py", "w").write(s)
