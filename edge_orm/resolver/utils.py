@@ -1,5 +1,5 @@
 import typing as T
-import orjson
+import json
 from enum import Enum
 from pydantic import BaseModel
 from edge_orm.external import encoders
@@ -25,7 +25,7 @@ def line_var_from_field_info(
     field_str = f"{field_name} := <{type_cast}>{var_field_name}"
     if isinstance(val, (dict, list)):
         if type_cast.endswith("::str") or type_cast.endswith("::json"):
-            val = orjson.dumps(encoders.jsonable_encoder(val))
+            val = json.dumps(encoders.jsonable_encoder(val))
     elif isinstance(val, BaseModel):
         val = val.json()
     elif isinstance(val, set):
