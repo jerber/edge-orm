@@ -654,7 +654,7 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
             **select_variables,
             "__data": json.dumps(encoders.jsonable_encoder(insert_vars_list)),
         }
-        debug(variables)
+        # debug(variables)
         with span.span(op=f"edgedb.add_many.{self.model_name}"):
             raw_response = await execute.query(
                 client=client or self._node_config.client,

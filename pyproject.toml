@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "edge-orm"
-version = "0.1.25"
+version = "0.1.26"
 description = ""
 authors = ["Jeremy Berman <jerber@sas.upenn.edu>"]
 readme = "README.md"
@@ -9,7 +9,7 @@ exclude = ["tests/**/*"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-edgedb = "^1.0.0"
+edgedb = "^1.2.0"
 pydantic = { extras = ["email"], version = "^1.10.2" }
 orjson = "^3.8.0"
 devtools = "*"
