@@ -227,6 +227,8 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
             raise errors.ResolverException(
                 f"Offset of {self._offset} has already been provided."
             )
+        if isinstance(_, str):
+            _ = int(_)
         self._offset = _
         return self
 
@@ -235,6 +237,8 @@ class Resolver(BaseModel, T.Generic[NodeType, InsertType, PatchType], metaclass=
             raise errors.ResolverException(
                 f"Limit of {self._limit} has already been provided."
             )
+        if isinstance(_, str):
+            _ = int(_)
         self._limit = _
         return self
 
